@@ -1,0 +1,9 @@
+[package]
+name = "bevy_prototype_animation"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bevy_reflect = "0.6"
+bevy_asset = "0.6"
+bevy_math = "0.6"
