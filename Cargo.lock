@@ -225,6 +225,10 @@ dependencies = [
  "bevy_asset",
  "bevy_math",
  "bevy_reflect",
+ "parallel_vec",
+ "rand",
+ "serde",
+ "thiserror",
 ]
 
 [[package]]
@@ -692,6 +696,12 @@ name = "once_cell"
 version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "da32515d9f6e6e489d7bc9d84c71b060db7247dc035bbe44eac88cf87486d8d5"
+
+[[package]]
+name = "parallel_vec"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2fcb98eeab579516430cbab5b578d62f6b5df73f0e095c119c41ae4ca9e1efaa"
 
 [[package]]
 name = "parking"
