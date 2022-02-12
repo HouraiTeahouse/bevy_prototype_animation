@@ -1,4 +1,5 @@
 pub mod curves;
+pub mod graph;
 pub mod math;
 
 use curves::Curve;
