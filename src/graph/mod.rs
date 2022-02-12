@@ -1,3 +1,5 @@
+mod graph;
+
 use crate::Sample;
 
 use parallel_vec::ParallelVec;
