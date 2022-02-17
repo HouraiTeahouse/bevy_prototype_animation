@@ -92,10 +92,27 @@ where
     }
 }
 
-impl<T> Sample<T> for CurveFixed<T>
+impl<T> Curve for CurveFixed<T>
 where
     T: Lerp<Output = T> + Clone,
 {
+    type Output = T;
+
+    fn duration(&self) -> f32 {
+        ((self.keyframe_count() as f32 - 1.0 - self.negative_frame_offset) / self.frame_rate)
+            .max(0.0)
+    }
+
+    #[inline]
+    fn time_offset(&self) -> f32 {
+        -self.negative_frame_offset / self.frame_rate
+    }
+
+    #[inline]
+    fn keyframe_count(&self) -> usize {
+        self.keyframes.len()
+    }
+
     fn sample(&self, time: f32) -> T {
         // Make sure to have at least one sample
         assert!(!self.keyframes.is_empty(), "track is empty");
@@ -118,26 +135,6 @@ where
                 )
             }
         }
-    }
-}
-
-impl<T> Curve<T> for CurveFixed<T>
-where
-    T: Lerp<Output = T> + Clone,
-{
-    fn duration(&self) -> f32 {
-        ((self.keyframe_count() as f32 - 1.0 - self.negative_frame_offset) / self.frame_rate)
-            .max(0.0)
-    }
-
-    #[inline]
-    fn time_offset(&self) -> f32 {
-        -self.negative_frame_offset / self.frame_rate
-    }
-
-    #[inline]
-    fn keyframe_count(&self) -> usize {
-        self.keyframes.len()
     }
 
     #[inline]

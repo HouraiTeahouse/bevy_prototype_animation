@@ -225,6 +225,7 @@ dependencies = [
  "bevy_asset",
  "bevy_math",
  "bevy_reflect",
+ "bevy_utils",
  "parallel_vec",
  "rand",
  "serde",

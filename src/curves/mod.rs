@@ -1,7 +1,5 @@
 use thiserror::Error;
 
-use crate::Sample;
-
 mod fixed;
 // mod variable;
 //mod variable_linear;
@@ -11,6 +9,20 @@ pub use fixed::*;
 //pub use variable_linear::*;
 
 use crate::math::interpolation::Lerp;
+use bevy_math::*;
+
+pub struct Track {
+    Float32(Curve<f32>),
+    Float64(Curve<f64>),
+    Float32x2(Curve<Vec2>),
+    Float32x3(Curve<Vec3>),
+    Float32x3A(Curve<Vec3A>),
+    Float32x4(Curve<Vec4>),
+    Quat(Curve<Quat>),
+    Bool(Curve<Bool>),
+    RangeFloat32(Curve<Range<f32>>),
+    RangeFloat32(Curve<Range<f32>>),
+}
 
 /// Points to a keyframe inside a given curve.
 ///
@@ -24,15 +36,37 @@ pub type KeyframeIndex = u16;
 
 /// Defines a curve function that can be sampled.
 /// Typically composed made of keyframes
-pub trait Curve<T>: Sample<T> {
+pub enum Curve<T> {
+    Fixed(CurveFixed<T>),
+}
+
+impl CurveFixed {
     /// The total duration of the curve in seconds.
-    fn duration(&self) -> f32;
+    pub fn duration(&self) -> f32 {
+        match self {
+            Self::Fixed(curve) => curve.duration(),
+        }
+    }
 
     /// The time offset before the first keyframe.
-    fn time_offset(&self) -> f32;
+    pub fn time_offset(&self) -> f32 {
+        match self {
+            Self::Fixed(curve) => curve.time_offset(),
+        }
+    }
 
     /// The number of keyframes within the curve.
-    fn keyframe_count(&self) -> usize;
+    pub fn keyframe_count(&self) -> usize {
+        match self {
+            Self::Fixed(curve) => curve.keyframe_count(),
+        }
+    }
+
+    pub fn sample(&self, time: f32) -> T {
+        match self {
+            Self::Fixed(curve) => curve.sample(time),
+        }
+    }
 
     /// Samples the curve starting from some keyframe cursor, this make the common case `O(1)`
     ///
@@ -52,38 +86,19 @@ pub trait Curve<T>: Sample<T> {
     /// # Panics
     ///
     /// Panics when the curve is empty, e.i. has no keyframes
-    fn sample_with_cursor(&self, cursor: KeyframeIndex, time: f32) -> (KeyframeIndex, T);
-}
+    pub fn sample_with_cursor(&self, cursor: &mut KeyframeIndex, time: f32) -> T {
+        match self {
+            Self::Fixed(curve) => curve.sample_with_cursor(time),
+        }
+    }
 
-#[derive(Error, Debug)]
-pub enum CurveError {
-    #[error("number of keyframes time stamps and values doesn't match")]
-    MismatchedLength,
-    #[error("limit of {0} keyframes exceeded")]
-    KeyframeLimitReached(usize),
-    #[error("keyframes aren't sorted by time")]
-    NotSorted,
-}
-
-pub trait CurveUtils<T>: Curve<T>
-where
-    T: Lerp<Output = T> + Clone,
-{
     /// Resamples the curve preserving the loop cycle.
     ///
     /// [`CurveFixed`] only supports evenly spaced keyframes, because of that the curve duration
     /// is always a multiple of the frame rate. So resampling a curve will always round up their duration
     /// but it's still possible to preserve the loop cycle, i.e. both start and end keyframes will be remain the same,
     /// which is a very desired property.
-    fn resample_preserving_loop(&self, frame_rate: f32) -> CurveFixed<T>;
-}
-
-impl<C, T> CurveUtils<T> for C
-where
-    C: Curve<T>,
-    T: Lerp<Output = T> + Clone,
-{
-    fn resample_preserving_loop(&self, frame_rate: f32) -> CurveFixed<T> {
+    pub fn resample_preserving_loop(&self, frame_rate: f32) -> CurveFixed<T> {
         // get properties
         let offset = self.time_offset();
         let duration = self.duration();
@@ -109,4 +124,14 @@ where
 
         CurveFixed::from_keyframes_with_offset(frame_rate, frame_offset, keyframes)
     }
+}
+
+#[derive(Error, Debug)]
+pub enum CurveError {
+    #[error("number of keyframes time stamps and values doesn't match")]
+    MismatchedLength,
+    #[error("limit of {0} keyframes exceeded")]
+    KeyframeLimitReached(usize),
+    #[error("keyframes aren't sorted by time")]
+    NotSorted,
 }

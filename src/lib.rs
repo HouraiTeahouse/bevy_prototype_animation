@@ -2,20 +2,18 @@ pub mod curves;
 pub mod graph;
 pub mod math;
 
-use curves::Curve;
+use curves::*;
+use bevy_reflect::{Reflect, TypeUuid};
+use bevy_utils::HashMap;
 use std::any::Any;
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::sync::Arc;
 
-pub trait Sample<T> {
-    fn sample(&self, time: f32) -> T;
-}
-
 /// An immutable container of curves.
+#[derive(TypeUuid)]
+#[uuid = "28258d17-82c2-4a6f-8930-322baa150396"]
 pub struct AnimationClip {
-    // Actually a map of str -> Arc<dyn Curve<T>>
-    curves: HashMap<Cow<'static, str>, Box<dyn Any>>,
+    curves: HashMap<Cow<'static, str>, CurveUntyped>,
 }
 
 impl AnimationClip {
@@ -26,13 +24,13 @@ impl AnimationClip {
     pub fn get_curve<T: 'static>(
         &self,
         key: impl Into<Cow<'static, str>>,
-    ) -> Result<Arc<dyn Curve<T>>, GetCurveError> {
+    ) -> Result<Arc<dyn Curve<Output=T>>, GetCurveError> {
         self.curves
             .get(&key.into())
             .ok_or(GetCurveError::MissingKey)
             .and_then(|curve| {
                 curve
-                    .downcast_ref::<Arc<dyn Curve<T>>>()
+                    .downcast_ref::<Arc<dyn Curve<Output=T>>>()
                     .map(|curve| curve.clone())
                     .ok_or(GetCurveError::WrongType)
             })
@@ -40,21 +38,20 @@ impl AnimationClip {
 }
 
 pub struct AnimationClipBuilder {
-    // Actually a map of str -> Arc<dyn Curve<T>>
-    curves: HashMap<Cow<'static, str>, Box<dyn Any>>,
+    curves: HashMap<Cow<'static, str>, Arc<dyn Curve + Send + Sync + 'static>>,
 }
 
 impl AnimationClipBuilder {
     pub fn new() -> AnimationClipBuilder {
         Self {
-            curves: HashMap::new(),
+            curves: HashMap::default(),
         }
     }
 
     pub fn add_curve<T: 'static>(
         self,
         key: impl Into<Cow<'static, str>>,
-        curve: impl Curve<T> + 'static,
+        curve: impl Curve<Output = T> + Send + Sync + 'static,
     ) -> Self {
         self.add_dynamic_curve(key, Arc::new(curve))
     }
@@ -62,7 +59,7 @@ impl AnimationClipBuilder {
     pub fn add_dynamic_curve<T: 'static>(
         mut self,
         key: impl Into<Cow<'static, str>>,
-        curve: Arc<dyn Curve<T>>,
+        curve: Arc<dyn Curve<Output = T> + Send + Sync + 'static>,
     ) -> Self {
         self.curves.insert(key.into(), Box::new(curve));
         self

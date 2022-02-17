@@ -1,107 +1,141 @@
-mod graph;
+mod node;
 
-use crate::Sample;
+use node::*;
 
-use parallel_vec::ParallelVec;
-use std::ops::{Add, Mul};
+use crate::AnimationClip;
+use bevy_asset::Handle;
+use std::collections::{HashMap, VecDeque};
 
-fn repeat(time: f32, length: f32) -> f32 {
-    (time - f32::floor(time / length)).clamp(0.0, length)
+pub(self) struct GraphState {
+    // Individually weighted influences from each active clip.
+    influences: HashMap<Handle<AnimationClip>, f32>,
 }
 
-fn ping_pong(time: f32, length: f32) -> f32 {
-    let time = repeat(time, length * 2.0);
-    length - (time - length).abs()
+impl GraphState {
+    fn reset(&mut self) {
+        self.influences.clear();
+    }
+
+    fn add_influence(&mut self, clip: Handle<AnimationClip>, delta_weight: f32) {
+        if let Some(weight) = self.influences.get_mut(&clip) {
+            *weight += delta_weight;
+        } else {
+            self.influences.insert(clip, delta_weight);
+        }
+    }
 }
 
-pub struct MixerNode<T: 'static> {
-    inputs: ParallelVec<(f32, Box<dyn Sample<T>>)>,
+struct GraphTraversalNode {
+    node_id: NodeId,
+    cumulative_weight: f32,
 }
 
-impl<T> Sample<T> for MixerNode<T>
-where
-    T: Default + Add<Output = T> + Mul<f32, Output = T> + 'static,
-{
-    fn sample(&self, time: f32) -> T {
-        let mut value = T::default();
-        for (weight, input) in self.inputs.iter() {
-            if *weight != 0.0 {
-                value = value + input.sample(time) * (*weight);
+pub enum AnimationGraphError {
+    NodeNotFound(NodeId),
+    InputAlreadyExists(NodeId),
+}
+
+pub struct AnimationGraph {
+    nodes: GraphNodes,
+    state: GraphState,
+}
+
+impl AnimationGraph {
+    pub fn add_input(
+        &mut self,
+        target: NodeId,
+        input: NodeId,
+    ) -> Result<&mut NodeInput, AnimationGraphError> {
+        // TODO: Check for cycles before adding edge.
+
+        self.nodes
+            .get(input)
+            .ok_or(AnimationGraphError::NodeNotFound(input))?;
+
+        let target = self
+            .nodes
+            .get_mut(target)
+            .ok_or(AnimationGraphError::NodeNotFound(target))?;
+
+        if target.get_input_mut(input).is_some() {
+            Err(AnimationGraphError::InputAlreadyExists(input))
+        } else {
+            target.inputs.push(NodeInput::new(input));
+            Ok(target.inputs.last_mut().unwrap())
+        }
+    }
+
+    pub fn add_clip(&mut self, clip: Handle<AnimationClip>) -> NodeId {
+        // TODO: Find a way to check for duplicate leaf clip nodes
+        self.nodes.add(Node::create_leaf(clip))
+    }
+
+    /// Sets the time for a given node. If the node is set to propagate its
+    /// time, all of it's currently connected inputs will also have the time
+    /// propagated to them as well.
+    pub fn set_time(&mut self, node_id: NodeId, time: f32) -> Result<(), AnimationGraphError> {
+        if let Some(node) = self.nodes.get_mut(node_id) {
+            node.local_time = time;
+            if !node.propogate_time {
+                return Ok(());
+            }
+        } else {
+            return Err(AnimationGraphError::NodeNotFound(node_id));
+        }
+
+        //
+        // TODO: Cache this to avoid allocations in the future.
+        let mut pending = VecDeque::new();
+        pending.push_back(node_id);
+        while let Some(node_id) = pending.pop_front() {
+            if let Some(node) = self.nodes.get(node_id) {
+                let node = if let Some(node) = self.nodes.get_mut(node_id) {
+                    node.local_time = time;
+                    node
+                } else {
+                    continue;
+                };
+                if node.propogate_time {
+                    pending.extend(node.connected_inputs().map(|input| input.node_id()));
+                }
             }
         }
-        value
-    }
-}
 
-impl<T: 'static> MixerNode<T> {
-    pub fn new() -> Self {
-        Self {
-            inputs: ParallelVec::new(),
-        }
+        Ok(())
     }
 
-    pub fn add_input(&mut self, weight: f32, input: impl Sample<T> + 'static) {
-        self.inputs.push((weight, Box::new(input)))
-    }
+    /// Evaluates the graph, computing the influences individual results.
+    pub fn evaluate(&mut self) {
+        self.state.reset();
 
-    pub fn input_count(&self) -> usize {
-        self.inputs.len()
-    }
+        // TODO: Use smallvec to avoid allocation here.
+        let stack = vec![GraphTraversalNode {
+            node_id: NodeId::ROOT,
+            cumulative_weight: 1.0,
+        }];
 
-    pub fn clear(&mut self) {
-        self.inputs.clear()
-    }
-}
+        // Conduct a depth-first traversal of the graph multiplying the weights
+        // as it gets deeper into the tree.
+        while let Some(current) = stack.pop() {
+            let current_node = if let Some(node) = self.nodes.get(current.node_id) {
+                node
+            } else {
+                continue;
+            };
 
-pub struct ConstantNode<T: Clone>(pub T);
+            if let Some(clip) = current.clip {
+                self.state.add_influence(clip, current_node.weight);
+            }
 
-impl<T> Sample<T> for ConstantNode<T>
-where
-    T: Clone,
-{
-    fn sample(&self, _: f32) -> T {
-        self.0.clone()
-    }
-}
-
-pub struct RepeatNode<T: 'static> {
-    length: f32,
-    sub: Box<dyn Sample<T>>,
-}
-
-impl<T: 'static> Sample<T> for RepeatNode<T> {
-    fn sample(&self, time: f32) -> T {
-        self.sub.sample(repeat(time, self.length))
-    }
-}
-
-impl<T: 'static> RepeatNode<T> {
-    pub fn new(length: f32, sampler: impl Sample<T> + 'static) -> Self {
-        assert!(length >= 0.0, "RepeatNode: Length must be non-negative.");
-        Self {
-            length,
-            sub: Box::new(sampler),
-        }
-    }
-}
-
-pub struct PingPongNode<T> {
-    length: f32,
-    sub: Box<dyn Sample<T>>,
-}
-
-impl<T> Sample<T> for PingPongNode<T> {
-    fn sample(&self, time: f32) -> T {
-        self.sub.sample(ping_pong(time, self.length))
-    }
-}
-
-impl<T> PingPongNode<T> {
-    pub fn new(length: f32, sampler: impl Sample<T> + 'static) -> Self {
-        assert!(length >= 0.0, "PingPongNode: Length must be non-negative.");
-        Self {
-            length,
-            sub: Box::new(sampler),
+            for input in self.connected_inputs() {
+                let cumulative_weight = input.weight * current_node.cumulative_weight;
+                if cumulative_weight != 0.0 {
+                    stack.push(GraphTraversalNode {
+                        node_id: input.node_id,
+                        cumulative_weight,
+                    });
+                }
+            }
         }
     }
 }
