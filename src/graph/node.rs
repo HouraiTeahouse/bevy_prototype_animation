@@ -16,12 +16,13 @@ pub(super) struct GraphNodes {
 
 impl GraphNodes {
     pub fn add(&mut self, node: Node) -> NodeId {
-        self.nodes.push(node);
-        let id = self.nodes.len() - 1;
-        NodeId(
-            id.try_into()
+        let id = NodeId(
+            self.nodes
+                .len()
+                .try_into()
                 .expect("AnimationGraph has more than u16::MAX nodes."),
-        )
+        self.nodes.push(node);
+        id
     }
 
     pub fn get(&self, node: NodeId) -> Option<&Node> {
@@ -33,32 +34,38 @@ impl GraphNodes {
     }
 }
 
-pub struct Node {
-    pub(crate) local_time: f32,
-    pub(crate) inputs: Vec<NodeInput>,
-    // whether or not to propogate the time metric downstream
-    pub(crate) propogate_time: bool,
-    pub(crate) clip: Option<Handle<AnimationClip>>,
+pub enum Node {
+    Blend {
+        pub(crate) inputs: Vec<NodeInput>,
+        // whether or not to propogate time assignment downstream
+        pub(crate) propogate_time: bool,
+    },
+    Clip {
+        pub(crate) clip: ClipId,
+    }
 }
 
 impl Node {
-    pub(super) fn create_leaf(clip: Handle<AnimationClip>) -> Self {
-        Self {
-            local_time: 0.0,
-            inputs: Vec::new(),
-            propogate_time: false,
-            clip: Some(clip),
-        }
+    pub(super) fn create_leaf(clip: ClipId) -> Self {
+        Self::Clip(clip)
     }
 
     pub fn get_input(&self, input_id: NodeId) -> Option<&NodeInput> {
-        self.inputs.iter().find(|input| input.node_id == input_id)
+        if let Self::Blend { ref inputs } = self {
+            self.inputs.iter().find(|input| input.node_id == input_id)
+        } else {
+            None
+        }
     }
 
     pub fn get_input_mut(&mut self, input_id: NodeId) -> Option<&mut NodeInput> {
-        self.inputs
-            .iter_mut()
-            .find(|input| input.node_id == input_id)
+        if let Self::Blend { mut ref inputs } = self {
+            self.inputs
+                .iter_mut()
+                .find(|input| input.node_id == input_id)
+        } else {
+            None
+        }
     }
 
     pub fn connected_inputs(&self) -> impl Iterator<Item = &NodeInput> {

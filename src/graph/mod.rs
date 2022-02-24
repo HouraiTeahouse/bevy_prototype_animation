@@ -6,25 +6,68 @@ use crate::AnimationClip;
 use bevy_asset::Handle;
 use std::collections::{HashMap, VecDeque};
 
+#[derive(Default)]
+struct ClipState {
+    weight: f32,
+    time: f32,
+}
+
+#[derive(Default, Debug)]
 pub(self) struct GraphState {
-    // Individually weighted influences from each active clip.
-    influences: HashMap<Handle<AnimationClip>, f32>,
+    clips: Vec<ClipState>,
 }
 
 impl GraphState {
-    fn reset(&mut self) {
-        self.influences.clear();
+    /// Gets the number of clips that in the graph.
+    pub fn clip_count(&self) -> u16 {
+        self.clips.len() as u16
     }
 
-    fn add_influence(&mut self, clip: Handle<AnimationClip>, delta_weight: f32) {
-        if let Some(weight) = self.influences.get_mut(&clip) {
-            *weight += delta_weight;
-        } else {
-            self.influences.insert(clip, delta_weight);
+    /// Creates a new state for a clip. Returns the corresponding
+    /// internal ID for the clip.
+    pub fn add_clip(&mut self) -> ClipId {
+        assert!(self.clip_weights.len() < u16::MAX as usize);
+        let clip_id = ClipId(self.clip_weights.len() as u16);
+        self.clips.push(Default::default());
+        clip_id
+    }
+
+    /// Sets the time for a given clip in the current state of the
+    /// graph.
+    ///
+    /// # Panics
+    /// This will panic if `clip` isn't a valid `ClipId`.
+    pub fn set_time(&mut self, clip: ClipId, time: f32) {
+        self.clip_times[clip.0 as usize].time = time;
+    }
+
+    /// Advances time by a specific delta for all clips in the
+    /// graph.
+    pub fn advance_time(&mut self, delta_time: f32) {
+        for clip in self.clips.iter_mut() {
+            *clip.time += delta_time;
         }
+    }
+
+    /// Resets weights for all clips in the graph to 0.
+    pub fn clear_weights(&mut self) {
+        for influence in self.clip_influences.iter_mut() {
+            *clip.influence = 0.0;
+        }
+    }
+
+    /// Adds a change in weights to a specific clip in the current
+    /// state in the graph.
+    ///
+    /// # Panics
+    /// This will panic if `clip` isn't a valid `ClipId`.
+    pub fn add_weight(&mut self, clip: ClipId, delta_weight: f32) {
+        self.clips[clip.0 as usize].weight += delta_weight;
     }
 }
 
+/// A temporary state for tracking visited but unexplored nodes in
+/// the graph during evaluation.
 struct GraphTraversalNode {
     node_id: NodeId,
     cumulative_weight: f32,
@@ -65,8 +108,13 @@ impl AnimationGraph {
         }
     }
 
-    pub fn add_clip(&mut self, clip: Handle<AnimationClip>) -> NodeId {
-        // TODO: Find a way to check for duplicate leaf clip nodes
+    /// Adds an [`AnimationClip`] as a node in the graph.
+    ///
+    /// Returns the corresponding node ID.
+    pub fn add_clip(&mut self, clip: &AnimationClip) -> NodeId {
+        let clip_id = self.state.add_clip();
+        // TODO: Copy curves from the provided animation clip into curve
+        // storage.
         self.nodes.add(Node::create_leaf(clip))
     }
 
