@@ -1,3 +1,4 @@
+use crate::Animatable;
 use thiserror::Error;
 
 mod fixed;
@@ -8,21 +9,8 @@ pub use fixed::*;
 // pub use variable::*;
 //pub use variable_linear::*;
 
-use crate::math::interpolation::Lerp;
+// use crate::math::interpolation::Lerp;
 use bevy_math::*;
-
-pub struct Track {
-    Float32(Curve<f32>),
-    Float64(Curve<f64>),
-    Float32x2(Curve<Vec2>),
-    Float32x3(Curve<Vec3>),
-    Float32x3A(Curve<Vec3A>),
-    Float32x4(Curve<Vec4>),
-    Quat(Curve<Quat>),
-    Bool(Curve<Bool>),
-    RangeFloat32(Curve<Range<f32>>),
-    RangeFloat32(Curve<Range<f32>>),
-}
 
 /// Points to a keyframe inside a given curve.
 ///
@@ -36,37 +24,17 @@ pub type KeyframeIndex = u16;
 
 /// Defines a curve function that can be sampled.
 /// Typically composed made of keyframes
-pub enum Curve<T> {
-    Fixed(CurveFixed<T>),
-}
-
-impl CurveFixed {
+pub trait Curve<T> {
     /// The total duration of the curve in seconds.
-    pub fn duration(&self) -> f32 {
-        match self {
-            Self::Fixed(curve) => curve.duration(),
-        }
-    }
+    fn duration(&self) -> f32;
 
     /// The time offset before the first keyframe.
-    pub fn time_offset(&self) -> f32 {
-        match self {
-            Self::Fixed(curve) => curve.time_offset(),
-        }
-    }
+    fn time_offset(&self) -> f32;
 
     /// The number of keyframes within the curve.
-    pub fn keyframe_count(&self) -> usize {
-        match self {
-            Self::Fixed(curve) => curve.keyframe_count(),
-        }
-    }
+    fn keyframe_count(&self) -> usize;
 
-    pub fn sample(&self, time: f32) -> T {
-        match self {
-            Self::Fixed(curve) => curve.sample(time),
-        }
-    }
+    fn sample(&self, time: f32) -> T;
 
     /// Samples the curve starting from some keyframe cursor, this make the common case `O(1)`
     ///
@@ -86,44 +54,43 @@ impl CurveFixed {
     /// # Panics
     ///
     /// Panics when the curve is empty, e.i. has no keyframes
-    pub fn sample_with_cursor(&self, cursor: &mut KeyframeIndex, time: f32) -> T {
-        match self {
-            Self::Fixed(curve) => curve.sample_with_cursor(time),
-        }
-    }
+    fn sample_with_cursor(&self, cursor: KeyframeIndex, time: f32) -> (KeyframeIndex, T);
+}
 
-    /// Resamples the curve preserving the loop cycle.
-    ///
-    /// [`CurveFixed`] only supports evenly spaced keyframes, because of that the curve duration
-    /// is always a multiple of the frame rate. So resampling a curve will always round up their duration
-    /// but it's still possible to preserve the loop cycle, i.e. both start and end keyframes will be remain the same,
-    /// which is a very desired property.
-    pub fn resample_preserving_loop(&self, frame_rate: f32) -> CurveFixed<T> {
-        // get properties
-        let offset = self.time_offset();
-        let duration = self.duration();
+/// Resamples the curve preserving the loop cycle.
+///
+/// [`CurveFixed`] only supports evenly spaced keyframes, because of that the curve duration
+/// is always a multiple of the frame rate. So resampling a curve will always round up their duration
+/// but it's still possible to preserve the loop cycle, i.e. both start and end keyframes will be remain the same,
+/// which is a very desired property.
+pub fn resample_preserving_loop<T: Animatable + Clone>(
+    curve: &impl Curve<T>,
+    frame_rate: f32,
+) -> CurveFixed<T> {
+    // get properties
+    let offset = curve.time_offset();
+    let duration = curve.duration();
 
-        let frame_count = (duration * frame_rate).round() as usize;
-        let frame_offset = (offset * frame_rate).round() as i32;
+    let frame_count = (duration * frame_rate).round() as usize;
+    let frame_offset = (offset * frame_rate).round() as i32;
 
-        let normalize = 1.0 / (frame_count - 1) as f32;
-        let mut cursor0 = 0;
-        let keyframes = (0..frame_count)
-            .into_iter()
-            .map(|f| {
-                let time = duration * (f as f32 * normalize) + offset;
-                let (cursor1, value) = self.sample_with_cursor(cursor0, time);
-                cursor0 = cursor1;
-                value
-            })
-            .collect::<Vec<_>>();
+    let normalize = 1.0 / (frame_count - 1) as f32;
+    let mut cursor0 = 0;
+    let keyframes = (0..frame_count)
+        .into_iter()
+        .map(|f| {
+            let time = duration * (f as f32 * normalize) + offset;
+            let (cursor1, value) = curve.sample_with_cursor(cursor0, time);
+            cursor0 = cursor1;
+            value
+        })
+        .collect::<Vec<_>>();
 
-        // TODO: copy the start and end keyframes, because f32 precision might not be enough to preserve the loop
-        // keyframes[0] = self.value_at(0);
-        // keyframes[frame_count - 1] = self.value_at((self.len() - 1) as KeyframeIndex);
+    // TODO: copy the start and end keyframes, because f32 precision might not be enough to preserve the loop
+    // keyframes[0] = self.value_at(0);
+    // keyframes[frame_count - 1] = self.value_at((self.len() - 1) as KeyframeIndex);
 
-        CurveFixed::from_keyframes_with_offset(frame_rate, frame_offset, keyframes)
-    }
+    CurveFixed::from_keyframes_with_offset(frame_rate, frame_offset, keyframes)
 }
 
 #[derive(Error, Debug)]

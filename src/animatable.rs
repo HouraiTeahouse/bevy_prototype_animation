@@ -1,6 +1,7 @@
-use crate::math::interpolation::util;
+use crate::util;
 use bevy_math::*;
 use bevy_reflect::Reflect;
+use bevy_core::FloatOrd;
 use std::ops::{Range, RangeInclusive};
 
 pub struct BlendInput<T> {
@@ -8,24 +9,24 @@ pub struct BlendInput<T> {
     pub value: T,
 }
 
-pub trait Animatable: Reflect + Sized {
+pub trait Animatable: Reflect + Sized + Send + Sync + 'static {
     fn interpolate(a: &Self, b: &Self, time: f32) -> Self;
-    fn blend(inputs: impl Iterator<Item=BlendInput<Self>) -> Self;
+    fn blend(inputs: impl Iterator<Item = BlendInput<Self>>) -> Self;
 }
 
 macro_rules! impl_float_animatable_32 {
     ($ty: ty) => {
         impl Animatable for $ty {
             #[inline(always)]
-            fn interpolate(a: Self, b: Self, t: f32) -> Self::Output {
-                *a * (1.0 - t) + *b * t
+            fn interpolate(a: &Self, b: &Self, t: f32) -> Self {
+                (*a) * (1.0 - t) + (*b) * t
             }
 
             #[inline(always)]
-            fn blend(inputs: impl Iterator<Item=BlendInput<Self>>) -> Self {
+            fn blend(inputs: impl Iterator<Item = BlendInput<Self>>) -> Self {
                 inputs
                     .map(|input| input.weight * input.value)
-                    .sum()
+                    .fold(Default::default(), |a, b| a + b)
             }
         }
     };
@@ -35,16 +36,16 @@ macro_rules! impl_float_animatable_64 {
     ($ty: ty) => {
         impl Animatable for $ty {
             #[inline(always)]
-            fn interpolate(a: Self, b: Self, t: f32) -> Self::Output {
+            fn interpolate(a: &Self, b: &Self, t: f32) -> Self {
                 let t = f64::from(t);
-                *a * (1.0 - t) + *b * t
+                (*a) * (1.0 - t) + (*b) * t
             }
 
             #[inline(always)]
-            fn blend(inputs: impl Iterator<Item=BlendInput<Self>>) -> Self {
+            fn blend(inputs: impl Iterator<Item = BlendInput<Self>>) -> Self {
                 inputs
-                    .map(|input| input.weight * input.value)
-                    .sum()
+                    .map(|input| f64::from(input.weight) * input.value)
+                    .fold(Default::default(), |a, b| a + b)
             }
         }
     };
@@ -63,104 +64,110 @@ impl_float_animatable_64!(DVec4);
 /// Vec3 is special cased to use Vec3A internally for blending
 impl Animatable for Vec3 {
     #[inline(always)]
-    fn interpolate(a: Self, b: Self, t: f32) -> Self::Output {
-        let t = f64::from(t);
-        *a * (1.0 - t) + *b * t
+    fn interpolate(a: &Self, b: &Self, t: f32) -> Self {
+        (*a) * (1.0 - t) + (*b) * t
     }
 
     #[inline(always)]
-    fn blend(inputs: impl Iterator<Item=BlendInput<Self>>) -> Self {
+    fn blend(inputs: impl Iterator<Item = BlendInput<Self>>) -> Self {
         Self::from(
+            inputs
+                .map(|input| input.weight * Vec3A::from(input.value))
+                .fold(Vec3A::default(), |a, b| a + b),
+        )
+    }
+}
+
+impl Animatable for bool {
+    #[inline]
+    fn interpolate(a: &Self, b: &Self, t: f32) -> Self {
+        util::step_unclamped(*a, *b, t)
+    }
+
+    #[inline]
+    fn blend(inputs: impl Iterator<Item = BlendInput<Self>>) -> Self {
         inputs
-            .map(|input| input.weight * Vec3A::from(input.value))
-            .sum())
+            .max_by(|a, b| FloatOrd(a.weight).cmp(&FloatOrd(b.weight)))
+            .map(|input| input.value)
+            .unwrap_or(false)
     }
 }
 
-impl Lerp for bool {
-    type Output = Self;
+// impl Lerp for Quat {
+//     /// Performs an nlerp, because it's cheaper and easier to combine with other animations,
+//     /// reference: http://number-none.com/product/Understanding%20Slerp,%20Then%20Not%20Using%20It/
+//     #[inline]
+//     fn interpolate(a: Self, mut b: Self, t: f32) -> Self {
+//         // Make sure is always the short path, look at this: https://github.com/mgeier/quaternion-nursery
+//         if a.dot(b) < 0.0 {
+//             b = -b;
+//         }
 
-    #[inline]
-    fn lerp_unclamped(a: Self, b: Self, t: f32) -> Self {
-        util::step_unclamped(a, b, t)
-    }
-}
+//         let a: Vec4 = a.into();
+//         let b: Vec4 = b.into();
 
-impl Lerp for Quat {
-    /// Performs an nlerp, because it's cheaper and easier to combine with other animations,
-    /// reference: http://number-none.com/product/Understanding%20Slerp,%20Then%20Not%20Using%20It/
-    #[inline]
-    fn interpolate(a: Self, mut b: Self, t: f32) -> Self {
-        // Make sure is always the short path, look at this: https://github.com/mgeier/quaternion-nursery
-        if a.dot(b) < 0.0 {
-            b = -b;
-        }
+//         let rot = Vec4::lerp_unclamped(a, b, t);
+//         let inv_mag = util::approx_rsqrt(rot.dot(rot));
+//         Quat::from_vec4(rot * inv_mag)
+//     }
+// }
 
-        let a: Vec4 = a.into();
-        let b: Vec4 = b.into();
+// impl<T: Animatable> Animatable for Range<T> {
+//     fn interpolate(a: Self, b: Self, t: f32) -> Self {
+//         Self {
+//             start: <T as Animatable>::interpolate(&a.start, &b.start, t),
+//             end: <T as Animatable>::interpolate(&a.end, &b.end, t),
+//         }
+//     }
 
-        let rot = Vec4::lerp_unclamped(a, b, t);
-        let inv_mag = util::approx_rsqrt(rot.dot(rot));
-        Quat::from_vec4(rot * inv_mag)
-    }
-}
+//     fn blend(inputs: impl Iterator<Item = BlendInput<Self>>) -> Self {
+//         let mut starts = Vec::new();
+//         let mut ends = Vec::new();
 
-impl<T: Animatable> Animatable for Range<T> {
-    fn interpolate(a: Self, b: Self, t: f32) -> Self {
-        Self {
-            start: <T as Animatable>::interpolate(&a.start, &b.start, t),
-            end: <T as Animatable>::interpolate(&a.end, &b.end, t),
-        }
-    }
+//         for input in inputs {
+//             starts.push(BlendInput {
+//                 weight: input.weight,
+//                 value: input.value.start,
+//             });
+//             ends.push(BlendInput {
+//                 weight: input.weight,
+//                 value: input.value.end,
+//             });
+//         }
 
-    fn blend(inputs: impl Iterator<Item=BlendInput<Self>>) -> Self {
-        let mut starts = Vec::new();
-        let mut ends = Vec::new();
+//         Self {
+//             start: <T as Animatable>::blend(starts.into_iter()),
+//             end: <T as Animatable>::blend(ends.into_iter()),
+//         }
+//     }
+// }
 
-        for input in inputs {
-            starts.push(BlendInput {
-                weight: input.weight,
-                value: input.value.start,
-            });
-            ends.push(BlendInput {
-                weight: input.weight,
-                value: input.value.end,
-            });
-        }
+// impl<T: Animatable + Clone> Animatable for RangeInclusive<T> {
+//     fn interpolate(a: Self, b: Self, t: f32) -> Self {
+//         Self::new(
+//             <T as Animatable>::interpolate(a.start(), b.start(), t),
+//             <T as Animatable>::interpolate(a.end(), b.end(), t),
+//         )
+//     }
 
-        Self {
-            start: <T as Animatable>::blend(starts.into_iter()),
-            end: <T as Animatable>::blend(ends.into_iter()),
-        }
-    }
-}
+//     fn blend(inputs: impl Iterator<Item = BlendInput<Self>>) -> Self {
+//         let mut starts = Vec::new();
+//         let mut ends = Vec::new();
 
-impl<T: Animatable + Clone> Animatable for RangeInclusive<T> {
-    fn interpolate(a: Self, b: Self, t: f32) -> Self {
-        Self::new(
-            <T as Animatable>::interpolate(a.start(), b.start(), t),
-            <T as Animatable>::interpolate(a.end(), b.end(), t),
-        )
-    }
+//         for input in inputs {
+//             starts.push(BlendInput {
+//                 weight: input.weight,
+//                 value: input.value.start().clone(),
+//             });
+//             ends.push(BlendInput {
+//                 weight: input.weight,
+//                 value: input.value.end().clone(),
+//             });
+//         }
 
-    fn blend(inputs: impl Iterator<Item=BlendInput<Self>>) -> Self {
-        let mut starts = Vec::new();
-        let mut ends = Vec::new();
-
-        for input in inputs {
-            starts.push(BlendInput {
-                weight: input.weight,
-                value: input.value.start().clone(),
-            });
-            ends.push(BlendInput {
-                weight: input.weight,
-                value input.value.end().clone(),
-            });
-        }
-
-        Self::new(
-            <T as Animatable>::blend(starts.into_iter()),
-            <T as Animatable>::blend(ends.into_iter())
-        )
-    }
-}
+//         Self::new(
+//             <T as Animatable>::blend(starts.into_iter()),
+//             <T as Animatable>::blend(ends.into_iter()),
+//         )
+//     }
+// }

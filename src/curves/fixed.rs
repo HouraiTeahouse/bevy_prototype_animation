@@ -1,7 +1,6 @@
 use crate::{
+    Animatable, 
     curves::{Curve, KeyframeIndex},
-    math::interpolation::Lerp,
-    Sample,
 };
 use serde::{Deserialize, Serialize};
 
@@ -12,7 +11,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct CurveFixed<T>
 where
-    T: Lerp<Output = T> + Clone,
+    T: Animatable + Clone,
 {
     /// Frames per second
     frame_rate: f32,
@@ -25,7 +24,7 @@ where
 
 impl<T> CurveFixed<T>
 where
-    T: Lerp<Output = T> + Clone,
+    T: Animatable + Clone,
 {
     pub fn from_keyframes(frame_rate: f32, keyframes: Vec<T>) -> Self {
         Self::from_keyframes_with_offset(frame_rate, 0, keyframes)
@@ -92,12 +91,10 @@ where
     }
 }
 
-impl<T> Curve for CurveFixed<T>
+impl<T> Curve<T> for CurveFixed<T>
 where
-    T: Lerp<Output = T> + Clone,
+    T: Animatable + Clone,
 {
-    type Output = T;
-
     fn duration(&self) -> f32 {
         ((self.keyframe_count() as f32 - 1.0 - self.negative_frame_offset) / self.frame_rate)
             .max(0.0)
@@ -125,15 +122,12 @@ where
         if frame_idx >= self.keyframe_count() - 1 {
             self.keyframes.last().unwrap().clone()
         } else {
-            // Lerp the value
-            // SAFE: Both frame_idx and frame_idx + 1 are valid.
-            unsafe {
-                <&T as Lerp>::lerp_unclamped(
-                    self.keyframes.get_unchecked(frame_idx),
-                    self.keyframes.get_unchecked(frame_idx + 1),
-                    time,
-                )
-            }
+            // Interpolate the value
+            <T as Animatable>::interpolate(
+                &self.keyframes[frame_idx],
+                &self.keyframes[frame_idx + 1],
+                time,
+            )
         }
     }
 

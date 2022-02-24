@@ -4,10 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bevy_reflect = "0.6"
-bevy_asset = "0.6"
-bevy_math = "0.6"
-bevy_utils = "0.6"
+bevy_reflect = { git = "https://github.com/bevyengine/bevy.git", features = ["glam"] }
+bevy_asset = { git = "https://github.com/bevyengine/bevy.git" }
+bevy_core = { git = "https://github.com/bevyengine/bevy.git" }
+bevy_math = { git = "https://github.com/bevyengine/bevy.git" }
+bevy_utils = { git = "https://github.com/bevyengine/bevy.git" }
 serde = "1.0"
 parallel_vec = "0.2"
 thiserror = "1.0"

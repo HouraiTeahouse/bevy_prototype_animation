@@ -1,10 +1,11 @@
-use crate::{AnimationClip, graph::GraphState};
-use bevy_asset::Handle;
+use crate::{
+    graph::{ClipId, GraphState},
+    AnimationClip,
+};
 
-// The ID of a node within the graph.
-// The root
+// An opaque ID of a node within the graph.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(super) struct NodeId(u16);
+pub struct NodeId(u16);
 
 impl NodeId {
     pub const ROOT: NodeId = NodeId(0);
@@ -21,6 +22,7 @@ impl GraphNodes {
                 .len()
                 .try_into()
                 .expect("AnimationGraph has more than u16::MAX nodes."),
+        );
         self.nodes.push(node);
         id
     }
@@ -36,40 +38,22 @@ impl GraphNodes {
 
 pub enum Node {
     Blend {
-        pub(crate) inputs: Vec<NodeInput>,
+        inputs: Vec<NodeInput>,
         // whether or not to propogate time assignment downstream
-        pub(crate) propogate_time: bool,
+        propogate_time: bool,
     },
     Clip {
-        pub(crate) clip: ClipId,
-    }
+        clip: ClipId,
+    },
 }
 
 impl Node {
-    pub(super) fn create_leaf(clip: ClipId) -> Self {
-        Self::Clip(clip)
-    }
-
-    pub fn get_input(&self, input_id: NodeId) -> Option<&NodeInput> {
-        if let Self::Blend { ref inputs } = self {
-            self.inputs.iter().find(|input| input.node_id == input_id)
-        } else {
-            None
-        }
-    }
-
     pub fn get_input_mut(&mut self, input_id: NodeId) -> Option<&mut NodeInput> {
-        if let Self::Blend { mut ref inputs } = self {
-            self.inputs
-                .iter_mut()
-                .find(|input| input.node_id == input_id)
+        if let Self::Blend { inputs, .. } = self {
+            inputs.iter_mut().find(|input| input.node_id == input_id)
         } else {
             None
         }
-    }
-
-    pub fn connected_inputs(&self) -> impl Iterator<Item = &NodeInput> {
-        self.inputs.iter().filter(|input| input.connected)
     }
 }
 
