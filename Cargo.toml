@@ -5,10 +5,12 @@ edition = "2021"
 
 [dependencies]
 bevy_reflect = { git = "https://github.com/bevyengine/bevy.git", features = ["glam"] }
+bevy_app = { git = "https://github.com/bevyengine/bevy.git" }
 bevy_asset = { git = "https://github.com/bevyengine/bevy.git" }
 bevy_core = { git = "https://github.com/bevyengine/bevy.git" }
 bevy_ecs = { git = "https://github.com/bevyengine/bevy.git" }
 bevy_math = { git = "https://github.com/bevyengine/bevy.git" }
+bevy_transform = { git = "https://github.com/bevyengine/bevy.git" }
 bevy_utils = { git = "https://github.com/bevyengine/bevy.git" }
 serde = "1.0"
 parallel_vec = "0.2"
