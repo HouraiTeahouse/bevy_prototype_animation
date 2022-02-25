@@ -1,5 +1,5 @@
 use crate::{
-    curves::{Curve, KeyframeIndex},
+    curve::{Curve, KeyframeIndex},
     Animatable,
 };
 use serde::{Deserialize, Serialize};

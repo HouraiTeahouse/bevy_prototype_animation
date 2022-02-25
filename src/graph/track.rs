@@ -1,6 +1,9 @@
 use crate::{
-    curves::Curve, graph::GraphState, Animatable, AnimationClip, BlendInput, ClipCurve,
-    CurveWrapper,
+    clip::AnimationClip,
+    clip::{ClipCurve, CurveWrapper},
+    curve::Curve,
+    graph::GraphState,
+    Animatable, BlendInput,
 };
 use bevy_reflect::Reflect;
 use bevy_utils::HashMap;

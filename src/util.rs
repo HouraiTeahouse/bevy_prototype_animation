@@ -1,6 +1,6 @@
 /// Fast approximated reciprocal square root.
 #[inline]
-pub fn approx_rsqrt(x: f32) -> f32 {
+pub(crate) fn approx_rsqrt(x: f32) -> f32 {
     // Fall back to Quake 3 fast inverse sqrt, is has a higher error
     // but still good enough and faster than `.sqrt().recip()`,
     // implementation borrowed from Piston under the MIT License:
@@ -19,7 +19,7 @@ pub fn approx_rsqrt(x: f32) -> f32 {
 /// Steps between two different discrete values of any clonable type.
 /// Returns a copy of `b` if `t >= 1.0`, otherwise returns a copy of `b`.
 #[inline]
-pub fn step_unclamped<T>(a: T, b: T, t: f32) -> T {
+pub(crate) fn step_unclamped<T>(a: T, b: T, t: f32) -> T {
     if t >= 1.0 {
         a
     } else {

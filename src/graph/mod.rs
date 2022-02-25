@@ -4,7 +4,7 @@ mod track;
 pub(crate) use node::*;
 pub(crate) use track::*;
 
-use crate::{Animatable, AnimationClip};
+use crate::{clip::AnimationClip, Animatable};
 use bevy_ecs::component::Component;
 use bevy_reflect::Reflect;
 use std::{borrow::Cow, collections::VecDeque};
