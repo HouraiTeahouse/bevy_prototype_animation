@@ -36,10 +36,18 @@ pub enum TrackError {
 /// A non-generic interface for all [`Track<T>`] that can be used to hide
 /// the internal type-specific implementation.
 trait Track: Any {
-    // fn downcast_mut<T: Animatable>(&mut self) -> Option<&mut CurveTrack<T>>;
-    // fn add_curve<T: Animatable>(&mut self, clip_id: ClipId, curve: Arc<dyn Curve<T>>) -> Result<(), TrackError>;
+    fn as_mut_any(&mut self) -> &mut dyn Any;
     // fn blend<T: Animatable>(&self, state: &GraphState) -> Result<T, TrackError>;
     fn blend(&self, state: &GraphState, output: &mut dyn Reflect) -> Result<(), TrackError>;
+}
+
+impl dyn Track {
+    pub fn add_curve<C: Animatable>(&mut self, clip_id: ClipId, curve: Arc<dyn Curve<C>>) -> Result<(), TrackError> {
+        match self.as_mut_any().downcast_mut::<CurveTrack<C>>() {
+            Some(track) => Ok(track.add_curve(clip_id, curve)),
+            None => Err(TrackError::IncorrectType)
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -50,6 +58,16 @@ pub(crate) struct CurveTrack<T: Animatable> {
 }
 
 impl<T: Animatable> CurveTrack<T> {
+    fn add_curve(&mut self, clip_id: ClipId, curve: Arc<dyn Curve<T>>) {
+        let idx = clip_id.0 as usize;
+
+        // I assume this was your intent with `track.curves.fill_with(idx, || None);`
+        let new_idxs = idx.saturating_sub(self.curves.len());
+        self.curves.extend(std::iter::repeat(None).take(new_idxs));
+
+        self.curves[idx] = Some(curve);
+    }
+
     fn sample_and_blend(&self, state: &GraphState) -> T {
         let inputs = state
             .clips
@@ -66,26 +84,7 @@ impl<T: Animatable> CurveTrack<T> {
 }
 
 impl<T: Animatable> Track for CurveTrack<T> {
-    // fn downcast_mut<C: Animatable>(&mut self) -> Option<&mut CurveTrack<C>> {
-    //     (self as &mut dyn Any).downcast_mut::<CurveTrack<C>>()
-    // }
-
-    // fn add_curve<C: Animatable>(
-    //     &mut self,
-    //     clip_id: ClipId,
-    //     curve: Arc<dyn Curve<C>>
-    // ) -> Result<(), TrackError> {
-    //     match self.downcast_mut::<C>() {
-    //         Some(track) => {
-    //             let idx = clip_id.0 as usize;
-    //             track.curves.fill_with(idx, || None);
-    //             track.curves[idx] = Some(curve);
-    //             Ok(())
-    //         }
-    //         None => Err(TrackError::IncorrectType),
-    //     }
-    // }
-
+    fn as_mut_any(&mut self) -> &mut dyn Any { self as &mut _ }
     fn blend(&self, state: &GraphState, output: &mut dyn Reflect) -> Result<(), TrackError> {
         if output.any().type_id() == TypeId::of::<T>() {
             output.apply(&self.sample_and_blend(state));
