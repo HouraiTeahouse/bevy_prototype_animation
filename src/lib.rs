@@ -1,3 +1,7 @@
+#[cfg(test)]
+#[macro_use]
+extern crate static_assertions;
+
 mod animatable;
 pub mod curves;
 pub mod graph;
@@ -19,7 +23,7 @@ use std::{
 #[derive(Clone)]
 pub(crate) struct CurveWrapper<T>(pub Arc<dyn Curve<T>>);
 
-trait ClipCurve {
+trait ClipCurve: Send + Sync + 'static {
     fn value_type_id(&self) -> TypeId;
     fn as_any(&self) -> &dyn Any;
     fn into_track(&self, clip_id: ClipId) -> Box<dyn Track>;

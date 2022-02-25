@@ -24,7 +24,7 @@ pub type KeyframeIndex = u16;
 
 /// Defines a curve function that can be sampled.
 /// Typically composed made of keyframes
-pub trait Curve<T> {
+pub trait Curve<T>: Send + Sync + 'static {
     /// The total duration of the curve in seconds.
     fn duration(&self) -> f32;
 

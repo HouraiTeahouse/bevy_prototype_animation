@@ -93,3 +93,11 @@ impl NodeInput {
         self.weight = weight
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    assert_impl_all!(Node: Send, Sync);
+    assert_impl_all!(NodeInput: Send, Sync);
+}

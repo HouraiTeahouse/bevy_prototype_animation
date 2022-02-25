@@ -31,7 +31,7 @@ impl GraphClips {
 
         for (property, curve) in clip.curves.iter() {
             if let Some(track) = self.tracks.get_mut(property) {
-                track.add_generic_curve(clip_id, curve.as_ref())?;
+                track.add_generic_curve(clip_id, curve.as_ref()).unwrap();
             } else {
                 self.tracks
                     .insert(property.clone(), curve.into_track(clip_id));
@@ -70,7 +70,7 @@ pub enum TrackError {
 
 /// A non-generic interface for all [`Track<T>`] that can be used to hide
 /// the internal type-specific implementation.
-pub(crate) trait Track: Any {
+pub(crate) trait Track: Any + Send + Sync + 'static {
     fn value_type_id(&self) -> TypeId;
     fn as_any(&self) -> &dyn Any;
     fn as_mut_any(&mut self) -> &mut dyn Any;
@@ -168,4 +168,14 @@ impl<T: Animatable> Track for CurveTrack<T> {
             Err(TrackError::IncorrectType)
         }
     }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use bevy_math::*;
+
+    assert_impl_all!(GraphClips: Send, Sync);
+    assert_impl_all!(TrackError: Send, Sync);
+    assert_impl_all!(dyn Track: Send, Sync);
 }

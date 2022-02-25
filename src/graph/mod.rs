@@ -5,6 +5,7 @@ pub(crate) use node::*;
 pub(crate) use track::*;
 
 use crate::{Animatable, AnimationClip};
+use bevy_ecs::component::Component;
 use bevy_reflect::Reflect;
 use std::{borrow::Cow, collections::VecDeque};
 
@@ -76,6 +77,7 @@ pub enum AnimationGraphError {
     NotBlendNode(NodeId),
 }
 
+#[derive(Component)]
 pub struct AnimationGraph {
     nodes: GraphNodes,
     state: GraphState,
