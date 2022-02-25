@@ -4,13 +4,9 @@ mod track;
 pub(crate) use node::*;
 pub(crate) use track::*;
 
-// use crate::AnimationClip;
-use bevy_asset::Handle;
+use crate::{Animatable, AnimationClip};
 use bevy_reflect::Reflect;
-use std::{
-    borrow::Cow,
-    collections::{HashMap, VecDeque}
-};
+use std::{borrow::Cow, collections::VecDeque};
 
 #[derive(Default, Debug)]
 struct ClipState {
@@ -19,16 +15,11 @@ struct ClipState {
 }
 
 #[derive(Default, Debug)]
-pub(self) struct GraphState {
+pub(crate) struct GraphState {
     clips: Vec<ClipState>,
 }
 
 impl GraphState {
-    /// Gets the number of clips that in the graph.
-    pub fn clip_count(&self) -> u16 {
-        self.clips.len() as u16
-    }
-
     /// Creates a new state for a clip. Returns the corresponding
     /// internal ID for the clip.
     pub fn add_clip(&mut self) -> ClipId {
@@ -121,23 +112,33 @@ impl AnimationGraph {
     /// Adds an [`AnimationClip`] as a node in the graph.
     ///
     /// Returns the corresponding node ID.
-    // pub fn add_clip(&mut self, clip: &AnimationClip) -> NodeId {
-    //     let clip_id = self.state.add_clip();
-    //     // TODO: Copy curves from the provided animation clip into curve
-    //     // storage.
-    //     self.nodes.add(Node::create_leaf(clip_id))
-    // }
+    pub fn add_clip(&mut self, clip: &AnimationClip) -> NodeId {
+        let clip_id = self.state.add_clip();
+        // TODO: Handle the error from this call.
+        self.clips.add_clip(clip_id, clip);
+        self.nodes.add(Node::Clip { clip: clip_id })
+    }
 
-    /// Samples and applies a single property from the current state of the 
-    /// graph. If the graph has been mutated, it must be separately evaluated 
+    /// Advances the time for all clips in the graph by a set delta.
+    /// This function allows for negative time deltas.
+    pub fn advance_time(&mut self, delta_time: f32) {
+        self.state.advance_time(delta_time);
+    }
+
+    /// Samples and applies a single property from the current state of the
+    /// graph. If the graph has been mutated, it must be separately evaluated
     /// via [`evalaute`] before the values made by this function are updated.
-    pub fn apply(
-        &self, 
-        property: impl Into<Cow<'static, str>>,
-        output: &mut dyn Reflect,
-    ) {
+    pub fn apply(&self, property: impl Into<Cow<'static, str>>, output: &mut dyn Reflect) {
         // TODO: Handle the errors here.
         self.clips.sample_property(property, &self.state, output);
+    }
+
+    /// Samples a single property value from the current state of the graph.
+    /// If the graph has been mutated, it must be separately evaluated via
+    /// [`evalaute`] before the values made by this function are updated.
+    pub fn sample<T: Animatable>(&self, property: impl Into<Cow<'static, str>>) -> Result<T, ()> {
+        // TODO: Handle the errors here.
+        Ok(self.clips.sample(property, &self.state).unwrap())
     }
 
     /// Sets the time for a given node. If the node is set to propagate its

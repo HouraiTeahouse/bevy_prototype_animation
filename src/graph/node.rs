@@ -1,7 +1,4 @@
-use crate::{
-    graph::{ClipId, GraphState},
-    AnimationClip,
-};
+use crate::graph::ClipId;
 
 // An opaque ID of a node within the graph.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
