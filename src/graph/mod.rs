@@ -62,6 +62,25 @@ impl GraphState {
     pub fn add_weight(&mut self, clip: ClipId, delta_weight: f32) {
         self.clips[clip.0 as usize].weight += delta_weight;
     }
+
+    /// Normalize all of the weights.
+    pub fn normalize_weights(&mut self) {
+        // Get the length of the N-dimensional weight vector.
+        let weight_sum = self
+            .clips
+            .iter()
+            .map(|clip| clip.weight * clip.weight)
+            .sum::<f32>()
+            .sqrt();
+
+        if weight_sum != 0.0 {
+            return;
+        }
+
+        for clip in self.clips.iter_mut() {
+            clip.weight /= weight_sum;
+        }
+    }
 }
 
 /// A temporary state for tracking visited but unexplored nodes in
@@ -220,5 +239,7 @@ impl AnimationGraph {
                 }
             }
         }
+
+        self.state.normalize_weights();
     }
 }

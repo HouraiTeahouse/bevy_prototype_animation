@@ -63,4 +63,6 @@ pub fn sample_graphs_skeletal_system(
 
 /// Samples the current state of all updated [`AnimationGraph`]s and applies the sampled values
 /// to the applicable
+///
+/// This must be used as an exclusive system due to
 pub fn sample_graphs_generic_system(world: &mut World) {}
