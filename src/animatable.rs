@@ -2,10 +2,12 @@ use crate::util;
 use bevy_core::FloatOrd;
 use bevy_math::*;
 use bevy_reflect::Reflect;
+use bevy_transform::prelude::Transform;
 
 pub struct BlendInput<T> {
     pub weight: f32,
     pub value: T,
+    pub additive: bool,
 }
 
 pub trait Animatable: Reflect + Sized + Send + Sync + 'static {
@@ -23,9 +25,15 @@ macro_rules! impl_float_animatable_32 {
 
             #[inline(always)]
             fn blend(inputs: impl Iterator<Item = BlendInput<Self>>) -> Self {
-                inputs
-                    .map(|input| input.weight * input.value)
-                    .fold(Default::default(), |a, b| a + b)
+                let mut value = Default::default();
+                for input in inputs {
+                    if input.additive {
+                        value += input.weight * input.value;
+                    } else {
+                        value = Self::interpolate(&value, &input.value, input.weight);
+                    }
+                }
+                value
             }
         }
     };
@@ -42,9 +50,15 @@ macro_rules! impl_float_animatable_64 {
 
             #[inline(always)]
             fn blend(inputs: impl Iterator<Item = BlendInput<Self>>) -> Self {
-                inputs
-                    .map(|input| f64::from(input.weight) * input.value)
-                    .fold(Default::default(), |a, b| a + b)
+                let mut value = Default::default();
+                for input in inputs {
+                    if input.additive {
+                        value += f64::from(input.weight) * input.value;
+                    } else {
+                        value = Self::interpolate(&value, &input.value, input.weight);
+                    }
+                }
+                value
             }
         }
     };
@@ -69,11 +83,15 @@ impl Animatable for Vec3 {
 
     #[inline(always)]
     fn blend(inputs: impl Iterator<Item = BlendInput<Self>>) -> Self {
-        Self::from(
-            inputs
-                .map(|input| input.weight * Vec3A::from(input.value))
-                .fold(Vec3A::default(), |a, b| a + b),
-        )
+        let mut value = Vec3A::ZERO;
+        for input in inputs {
+            if input.additive {
+                value += input.weight * Vec3A::from(input.value);
+            } else {
+                value = Vec3A::interpolate(&value, &Vec3A::from(input.value), input.weight);
+            }
+        }
+        Self::from(value)
     }
 }
 
@@ -92,24 +110,64 @@ impl Animatable for bool {
     }
 }
 
-// impl Lerp for Quat {
-//     /// Performs an nlerp, because it's cheaper and easier to combine with other animations,
-//     /// reference: http://number-none.com/product/Understanding%20Slerp,%20Then%20Not%20Using%20It/
-//     #[inline]
-//     fn interpolate(a: Self, mut b: Self, t: f32) -> Self {
-//         // Make sure is always the short path, look at this: https://github.com/mgeier/quaternion-nursery
-//         if a.dot(b) < 0.0 {
-//             b = -b;
-//         }
+impl Animatable for Transform {
+    fn interpolate(a: &Self, b: &Self, t: f32) -> Self {
+        Self {
+            translation: Vec3::interpolate(&a.translation, &b.translation, t),
+            rotation: Quat::interpolate(&a.rotation, &b.rotation, t),
+            scale: Vec3::interpolate(&a.scale, &b.scale, t),
+        }
+    }
 
-//         let a: Vec4 = a.into();
-//         let b: Vec4 = b.into();
+    fn blend(inputs: impl Iterator<Item = BlendInput<Self>>) -> Self {
+        let mut translation = Vec3A::ZERO;
+        let mut scale = Vec3A::ZERO;
+        let mut rotation = Quat::IDENTITY;
 
-//         let rot = Vec4::lerp_unclamped(a, b, t);
-//         let inv_mag = util::approx_rsqrt(rot.dot(rot));
-//         Quat::from_vec4(rot * inv_mag)
-//     }
-// }
+        for input in inputs {
+            if input.additive {
+                translation += input.weight * Vec3A::from(input.value.translation);
+                scale += input.weight * Vec3A::from(input.value.scale);
+                rotation = (input.value.rotation * input.weight) * rotation;
+            } else {
+                translation = Vec3A::interpolate(&translation, &Vec3A::from(input.value.translation), input.weight);
+                scale = Vec3A::interpolate(&scale, &Vec3A::from(input.value.scale), input.weight);
+                rotation = Quat::interpolate(&rotation, &input.value.rotation, input.weight);
+            }
+        }
+
+        Self {
+            translation: Vec3::from(translation),
+            rotation,
+            scale: Vec3::from(scale)
+        }
+    }
+}
+
+impl Animatable for Quat {
+    /// Performs an nlerp, because it's cheaper and easier to combine with other animations,
+    /// reference: http://number-none.com/product/Understanding%20Slerp,%20Then%20Not%20Using%20It/
+    #[inline]
+    fn interpolate(a: &Self, b: &Self, t: f32) -> Self {
+        // Make sure is always the short path, look at this: https://github.com/mgeier/quaternion-nursery
+        let b = if a.dot(*b) < 0.0 { -*b } else  { *b };
+
+        let a: Vec4 = (*a).into();
+        let b: Vec4 = b.into();
+        let rot = Vec4::interpolate(&a, &b, t);
+        let inv_mag = util::approx_rsqrt(rot.dot(rot));
+        Quat::from_vec4(rot * inv_mag)
+    }
+
+    #[inline]
+    fn blend(inputs: impl Iterator<Item=BlendInput<Self>>) -> Self {
+        let mut value = Self::IDENTITY;
+        for input in inputs {
+            value = Self::interpolate(&value, &input.value, input.weight);
+        }
+        value
+    }
+}
 
 // impl<T: Animatable> Animatable for Range<T> {
 //     fn interpolate(a: Self, b: Self, t: f32) -> Self {

@@ -131,6 +131,8 @@ impl<T: Animatable> CurveTrack<T> {
             .map(|(clip, curve)| BlendInput {
                 weight: clip.weight,
                 value: curve.as_ref().unwrap().sample(clip.time),
+                // TODO: Expose this at the node level
+                additive: false,
             });
 
         T::blend(inputs)
