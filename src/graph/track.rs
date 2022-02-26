@@ -3,18 +3,18 @@ use crate::{
     clip::{ClipCurve, CurveWrapper},
     curve::Curve,
     graph::GraphState,
+    path::PropertyPath,
     Animatable, BlendInput,
 };
 use bevy_reflect::Reflect;
 use bevy_utils::HashMap;
 use std::{
     any::{Any, TypeId},
-    borrow::Cow,
     sync::Arc,
 };
 
 pub(super) struct GraphClips {
-    tracks: HashMap<Cow<'static, str>, Box<dyn Track + 'static>>,
+    tracks: HashMap<PropertyPath, Box<dyn Track + 'static>>,
 }
 
 impl GraphClips {
@@ -45,7 +45,7 @@ impl GraphClips {
 
     pub(super) fn sample<T: Animatable>(
         &self,
-        key: impl Into<Cow<'static, str>>,
+        key: impl Into<PropertyPath>,
         state: &GraphState,
     ) -> Result<T, TrackError> {
         let key = key.into();
@@ -55,7 +55,7 @@ impl GraphClips {
 
     pub(super) fn sample_property(
         &self,
-        key: impl Into<Cow<'static, str>>,
+        key: impl Into<PropertyPath>,
         state: &GraphState,
         output: &mut dyn Reflect,
     ) -> Result<(), TrackError> {

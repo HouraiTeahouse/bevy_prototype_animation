@@ -4,10 +4,10 @@ mod track;
 pub(crate) use node::*;
 pub(crate) use track::*;
 
-use crate::{clip::AnimationClip, Animatable};
+use crate::{clip::AnimationClip, path::PropertyPath, Animatable};
 use bevy_ecs::component::Component;
 use bevy_reflect::Reflect;
-use std::{borrow::Cow, collections::VecDeque};
+use std::collections::VecDeque;
 
 #[derive(Default, Debug)]
 struct ClipState {
@@ -149,7 +149,7 @@ impl AnimationGraph {
     /// Samples and applies a single property from the current state of the
     /// graph. If the graph has been mutated, it must be separately evaluated
     /// via [`evalaute`] before the values made by this function are updated.
-    pub fn apply(&self, property: impl Into<Cow<'static, str>>, output: &mut dyn Reflect) {
+    pub fn apply(&self, property: impl Into<PropertyPath>, output: &mut dyn Reflect) {
         // TODO: Handle the errors here.
         self.clips.sample_property(property, &self.state, output);
     }
@@ -157,7 +157,7 @@ impl AnimationGraph {
     /// Samples a single property value from the current state of the graph.
     /// If the graph has been mutated, it must be separately evaluated via
     /// [`evalaute`] before the values made by this function are updated.
-    pub fn sample<T: Animatable>(&self, property: impl Into<Cow<'static, str>>) -> Result<T, ()> {
+    pub fn sample<T: Animatable>(&self, property: impl Into<PropertyPath>) -> Result<T, ()> {
         // TODO: Handle the errors here.
         Ok(self.clips.sample(property, &self.state).unwrap())
     }

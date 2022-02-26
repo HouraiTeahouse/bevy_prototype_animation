@@ -6,6 +6,8 @@ mod animatable;
 pub mod clip;
 pub mod curve;
 pub mod graph;
+// pub mod hierarchy;
+pub mod path;
 mod util;
 
 pub mod prelude {

@@ -1,13 +1,13 @@
 use crate::{
     curve::Curve,
     graph::{ClipId, CurveTrack, Track},
+    path::PropertyPath,
     Animatable,
 };
 use bevy_reflect::TypeUuid;
 use bevy_utils::HashMap;
 use std::{
     any::{Any, TypeId},
-    borrow::Cow,
     sync::Arc,
 };
 
@@ -37,7 +37,7 @@ impl<T: Animatable> ClipCurve for CurveWrapper<T> {
 #[uuid = "28258d17-82c2-4a6f-8930-322baa150396"]
 pub struct AnimationClip {
     // TODO: See if we can remove this extra layer of indirection
-    pub(crate) curves: HashMap<Cow<'static, str>, Box<dyn ClipCurve>>,
+    pub(crate) curves: HashMap<PropertyPath, Box<dyn ClipCurve>>,
 }
 
 impl AnimationClip {
@@ -47,7 +47,7 @@ impl AnimationClip {
 
     pub fn get_curve<T: Animatable + 'static>(
         &self,
-        key: impl Into<Cow<'static, str>>,
+        key: impl Into<PropertyPath>,
     ) -> Result<Arc<dyn Curve<T>>, GetCurveError> {
         self.curves
             .get(&key.into())
@@ -63,7 +63,7 @@ impl AnimationClip {
 }
 
 pub struct AnimationClipBuilder {
-    curves: HashMap<Cow<'static, str>, Box<dyn ClipCurve>>,
+    curves: HashMap<PropertyPath, Box<dyn ClipCurve>>,
 }
 
 impl AnimationClipBuilder {
@@ -75,7 +75,7 @@ impl AnimationClipBuilder {
 
     pub fn add_curve<T: Animatable + 'static>(
         self,
-        key: impl Into<Cow<'static, str>>,
+        key: impl Into<PropertyPath>,
         curve: impl Curve<T> + Send + Sync + 'static,
     ) -> Self {
         self.add_dynamic_curve(key, Arc::new(curve))
@@ -83,7 +83,7 @@ impl AnimationClipBuilder {
 
     pub fn add_dynamic_curve<T: Animatable + 'static>(
         mut self,
-        key: impl Into<Cow<'static, str>>,
+        key: impl Into<PropertyPath>,
         curve: Arc<dyn Curve<T>>,
     ) -> Self {
         self.curves
