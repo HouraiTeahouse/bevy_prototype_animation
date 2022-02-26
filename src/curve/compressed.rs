@@ -1,10 +1,10 @@
 use crate::{
+    curve::{Curve, CurveFixed, KeyframeIndex},
     Animatable,
-    curve::{Curve, CurveFixed, KeyframeIndex}
 };
 use bevy_core::FloatOrd;
-use bevy_transform::prelude::Transform;
 use bevy_math::*;
+use bevy_transform::prelude::Transform;
 
 enum CompressedFloat32Storage {
     Static {
@@ -19,7 +19,7 @@ enum CompressedFloat32Storage {
 }
 
 impl CompressedFloat32Storage {
-    pub fn quantize(values: impl Iterator<Item=f32>) -> Self {
+    pub fn quantize(values: impl Iterator<Item = f32>) -> Self {
         let values: Vec<f32> = values.collect();
         assert!(!values.is_empty());
         let mut min_value = FloatOrd(f32::INFINITY);
@@ -34,15 +34,14 @@ impl CompressedFloat32Storage {
         if min_value == max_value {
             Self::Static {
                 frames: values.len(),
-                value: min_value.0
+                value: min_value.0,
             }
         } else {
             let increment = (max_value.0 - min_value.0) / f32::from(u16::MAX);
-            let frames = 
-                values
-                    .into_iter()
-                    .map(|value| ((value - min_value.0) / increment) as u16)
-                    .collect();
+            let frames = values
+                .into_iter()
+                .map(|value| ((value - min_value.0) / increment) as u16)
+                .collect();
 
             Self::Quantized {
                 frames,
@@ -68,10 +67,12 @@ impl CompressedFloat32Storage {
     #[inline(always)]
     pub fn sample(&self, frame_rate: f32, time: f32, time_offset: f32) -> f32 {
         match self {
-            Self::Static { value, .. }  => {
-                *value
-            }
-            Self::Quantized { frames, min_value, increment } => {
+            Self::Static { value, .. } => *value,
+            Self::Quantized {
+                frames,
+                min_value,
+                increment,
+            } => {
                 let frame_time = time * frame_rate - time_offset;
                 let frame_time = frame_time.clamp(0.0, (frames.len() - 1) as f32);
                 let frame = frame_time.trunc();

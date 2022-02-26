@@ -130,7 +130,11 @@ impl Animatable for Transform {
                 scale += input.weight * Vec3A::from(input.value.scale);
                 rotation = (input.value.rotation * input.weight) * rotation;
             } else {
-                translation = Vec3A::interpolate(&translation, &Vec3A::from(input.value.translation), input.weight);
+                translation = Vec3A::interpolate(
+                    &translation,
+                    &Vec3A::from(input.value.translation),
+                    input.weight,
+                );
                 scale = Vec3A::interpolate(&scale, &Vec3A::from(input.value.scale), input.weight);
                 rotation = Quat::interpolate(&rotation, &input.value.rotation, input.weight);
             }
@@ -139,7 +143,7 @@ impl Animatable for Transform {
         Self {
             translation: Vec3::from(translation),
             rotation,
-            scale: Vec3::from(scale)
+            scale: Vec3::from(scale),
         }
     }
 }
@@ -150,7 +154,7 @@ impl Animatable for Quat {
     #[inline]
     fn interpolate(a: &Self, b: &Self, t: f32) -> Self {
         // Make sure is always the short path, look at this: https://github.com/mgeier/quaternion-nursery
-        let b = if a.dot(*b) < 0.0 { -*b } else  { *b };
+        let b = if a.dot(*b) < 0.0 { -*b } else { *b };
 
         let a: Vec4 = (*a).into();
         let b: Vec4 = b.into();
@@ -160,7 +164,7 @@ impl Animatable for Quat {
     }
 
     #[inline]
-    fn blend(inputs: impl Iterator<Item=BlendInput<Self>>) -> Self {
+    fn blend(inputs: impl Iterator<Item = BlendInput<Self>>) -> Self {
         let mut value = Self::IDENTITY;
         for input in inputs {
             value = Self::interpolate(&value, &input.value, input.weight);

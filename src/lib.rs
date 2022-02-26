@@ -12,8 +12,8 @@ pub mod prelude {
     pub use crate::{clip::AnimationClip, curve::Curve, graph::AnimationGraph};
 }
 
-pub use animatable::*;
 use crate::prelude::*;
+pub use animatable::*;
 use bevy_app::prelude::*;
 use bevy_asset::prelude::*;
 use bevy_ecs::prelude::*;
@@ -30,22 +30,21 @@ pub struct AnimationPlugin;
 
 impl Plugin for AnimationPlugin {
     fn build(&self, app: &mut App) {
-        app
-            .add_asset::<clip::AnimationClip>()
+        app.add_asset::<clip::AnimationClip>()
             .add_system(evaluate_graph_system.label(AnimationSystem::GraphEvaluation))
             .add_system(
-                sample_graphs_skeletal_system   
+                sample_graphs_skeletal_system
                     .label(AnimationSystem::GraphSamplingSkeletal)
                     .after(AnimationSystem::GraphEvaluation)
-                    .before(TransformSystem::TransformPropagate)
-                )
+                    .before(TransformSystem::TransformPropagate),
+            )
             .add_system(
                 sample_graphs_generic_system
                     .exclusive_system()
                     .label(AnimationSystem::GraphSamplingGeneric)
                     .after(AnimationSystem::GraphEvaluation)
-                    .before(TransformSystem::TransformPropagate)
-                );
+                    .before(TransformSystem::TransformPropagate),
+            );
     }
 }
 
@@ -58,11 +57,10 @@ pub fn evaluate_graph_system(mut graphs: Query<&mut AnimationGraph, Changed<Anim
 
 pub fn sample_graphs_skeletal_system(
     graphs: Query<&AnimationGraph, Changed<AnimationGraph>>,
-    transforms: Query<&mut Transform>
+    transforms: Query<&mut Transform>,
 ) {
 }
 
 /// Samples the current state of all updated [`AnimationGraph`]s and applies the sampled values
-/// to the applicable 
-pub fn sample_graphs_generic_system(world: &mut World) {
-}
+/// to the applicable
+pub fn sample_graphs_generic_system(world: &mut World) {}
