@@ -2,6 +2,7 @@ use crate::Animatable;
 use thiserror::Error;
 
 mod fixed;
+pub mod compressed;
 // mod variable;
 //mod variable_linear;
 
