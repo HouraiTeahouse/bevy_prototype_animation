@@ -5,7 +5,7 @@ use crate::{
     Animatable,
 };
 use bevy_reflect::TypeUuid;
-use bevy_utils::HashMap;
+use bevy_utils::{Hashed, PreHashMap};
 use std::{
     any::{Any, TypeId},
     sync::Arc,
@@ -37,7 +37,7 @@ impl<T: Animatable> ClipCurve for CurveWrapper<T> {
 #[uuid = "28258d17-82c2-4a6f-8930-322baa150396"]
 pub struct AnimationClip {
     // TODO: See if we can remove this extra layer of indirection
-    pub(crate) curves: HashMap<PropertyPath, Box<dyn ClipCurve>>,
+    pub(crate) curves: PreHashMap<PropertyPath, Box<dyn ClipCurve>>,
 }
 
 impl AnimationClip {
@@ -45,12 +45,16 @@ impl AnimationClip {
         AnimationClipBuilder::new()
     }
 
+    pub fn properties(&self) -> impl Iterator<Item = &Hashed<PropertyPath>> {
+        self.curves.keys()
+    }
+
     pub fn get_curve<T: Animatable + 'static>(
         &self,
-        key: impl Into<PropertyPath>,
+        key: &Hashed<PropertyPath>,
     ) -> Result<Arc<dyn Curve<T>>, GetCurveError> {
         self.curves
-            .get(&key.into())
+            .get(key)
             .ok_or(GetCurveError::MissingKey)
             .and_then(|curve| {
                 curve
@@ -63,13 +67,13 @@ impl AnimationClip {
 }
 
 pub struct AnimationClipBuilder {
-    curves: HashMap<PropertyPath, Box<dyn ClipCurve>>,
+    curves: PreHashMap<PropertyPath, Box<dyn ClipCurve>>,
 }
 
 impl AnimationClipBuilder {
     pub fn new() -> AnimationClipBuilder {
         Self {
-            curves: HashMap::default(),
+            curves: PreHashMap::default(),
         }
     }
 
@@ -87,7 +91,7 @@ impl AnimationClipBuilder {
         curve: Arc<dyn Curve<T>>,
     ) -> Self {
         self.curves
-            .insert(key.into(), Box::new(CurveWrapper(curve)));
+            .insert(Hashed::new(key.into()), Box::new(CurveWrapper(curve)));
         self
     }
 

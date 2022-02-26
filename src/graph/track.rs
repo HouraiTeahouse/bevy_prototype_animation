@@ -7,17 +7,21 @@ use crate::{
     Animatable, BlendInput,
 };
 use bevy_reflect::Reflect;
-use bevy_utils::HashMap;
+use bevy_utils::{Hashed, PreHashMap};
 use std::{
     any::{Any, TypeId},
     sync::Arc,
 };
 
 pub(super) struct GraphClips {
-    tracks: HashMap<PropertyPath, Box<dyn Track + 'static>>,
+    tracks: PreHashMap<PropertyPath, Box<dyn Track + 'static>>,
 }
 
 impl GraphClips {
+    pub(super) fn properties(&self) -> impl Iterator<Item = &Hashed<PropertyPath>> {
+        self.tracks.keys()
+    }
+
     pub(super) fn add_clip(
         &mut self,
         clip_id: ClipId,
@@ -45,22 +49,21 @@ impl GraphClips {
 
     pub(super) fn sample<T: Animatable>(
         &self,
-        key: impl Into<PropertyPath>,
+        key: &Hashed<PropertyPath>,
         state: &GraphState,
     ) -> Result<T, TrackError> {
-        let key = key.into();
-        let track = self.tracks.get(&key).ok_or(TrackError::MissingTrack)?;
+        let track = self.tracks.get(key).ok_or(TrackError::MissingTrack)?;
         track.blend(state)
     }
 
     pub(super) fn sample_property(
         &self,
-        key: impl Into<PropertyPath>,
+        key: &Hashed<PropertyPath>,
         state: &GraphState,
         output: &mut dyn Reflect,
     ) -> Result<(), TrackError> {
         let key = key.into();
-        let track = self.tracks.get(&key).ok_or(TrackError::MissingTrack)?;
+        let track = self.tracks.get(key).ok_or(TrackError::MissingTrack)?;
         track.blend_via_reflect(state, output)
     }
 }
