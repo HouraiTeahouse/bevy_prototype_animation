@@ -3,68 +3,134 @@ use crate::{
     clip::{ClipCurve, CurveWrapper},
     curve::Curve,
     graph::GraphState,
-    path::PropertyPath,
+    path::{EntityPath, FieldPath, PropertyPath},
     Animatable, BlendInput,
 };
+use bevy_ecs::prelude::Entity;
 use bevy_reflect::Reflect;
-use bevy_utils::{Hashed, PreHashMap};
+use bevy_utils::{HashMap, Hashed, PreHashMap};
 use std::{
     any::{Any, TypeId},
     sync::Arc,
 };
 
-pub(super) struct GraphClips {
-    tracks: PreHashMap<PropertyPath, Box<dyn Track + 'static>>,
+#[derive(Debug, Clone, Copy)]
+pub struct BoneId(usize);
+
+pub struct Bone {
+    id: BoneId,
+    entity: Option<Entity>,
+    tracks: PreHashMap<FieldPath, Box<dyn Track + 'static>>,
 }
 
-impl GraphClips {
-    pub(super) fn properties(&self) -> impl Iterator<Item = &Hashed<PropertyPath>> {
+impl Bone {
+    pub fn id(&self) -> BoneId {
+        self.id
+    }
+
+    pub fn properties(&self) -> impl Iterator<Item = &Hashed<FieldPath>> {
         self.tracks.keys()
     }
 
-    pub(super) fn add_clip(
-        &mut self,
-        clip_id: ClipId,
-        clip: &AnimationClip,
-    ) -> Result<(), TrackError> {
-        // Verify that the types for each of the tracks are identical before adding any of the curves in.
-        for (property, curve) in clip.curves.iter() {
-            if let Some(track) = self.tracks.get_mut(property) {
-                if curve.value_type_id() != track.value_type_id() {
-                    return Err(TrackError::IncorrectType);
-                }
-            }
-        }
-
-        for (property, curve) in clip.curves.iter() {
-            if let Some(track) = self.tracks.get_mut(property) {
-                track.add_generic_curve(clip_id, curve.as_ref()).unwrap();
-            } else {
-                self.tracks
-                    .insert(property.clone(), curve.into_track(clip_id));
-            }
-        }
-        Ok(())
+    /// Gets the currently bound entity.
+    ///
+    /// This may not be a valid entity ID even if available.
+    pub fn entity(&self) -> Option<Entity> {
+        self.entity
     }
 
-    pub(super) fn sample<T: Animatable>(
+    pub(crate) fn set_entity(&mut self, entity: Option<Entity>) {
+        self.entity = entity;
+    }
+
+    // TODO: Find a way to expose this without exposing internal state.
+    pub(crate) fn sample<T: Animatable>(
         &self,
-        key: &Hashed<PropertyPath>,
+        key: &Hashed<FieldPath>,
         state: &GraphState,
     ) -> Result<T, TrackError> {
         let track = self.tracks.get(key).ok_or(TrackError::MissingTrack)?;
         track.blend(state)
     }
 
-    pub(super) fn sample_property(
+    pub(crate) fn sample_property(
         &self,
-        key: &Hashed<PropertyPath>,
+        key: &Hashed<FieldPath>,
         state: &GraphState,
         output: &mut dyn Reflect,
     ) -> Result<(), TrackError> {
         let key = key.into();
         let track = self.tracks.get(key).ok_or(TrackError::MissingTrack)?;
         track.blend_via_reflect(state, output)
+    }
+}
+
+pub(super) struct GraphClips {
+    bones: HashMap<EntityPath, BoneId>,
+    // Indexed by BoneId
+    tracks: Vec<Bone>,
+}
+
+impl GraphClips {
+    pub(super) fn add_clip(
+        &mut self,
+        clip_id: ClipId,
+        clip: &AnimationClip,
+    ) -> Result<(), TrackError> {
+        // Verify that the types for each of the tracks are identical before adding any of the curves in.
+        for (path, curve) in clip.curves.iter() {
+            if let Some(bone) = self.find_bone(path.entity()) {
+                let key = Hashed::new(path.field().clone());
+                if let Some(track) = bone.tracks.get(&key) {
+                    if curve.value_type_id() != track.value_type_id() {
+                        return Err(TrackError::IncorrectType);
+                    }
+                }
+            }
+        }
+
+        for (path, curve) in clip.curves.iter() {
+            let bone_id = if let Some(bone_id) = self.bones.get(path.entity()) {
+                *bone_id
+            } else {
+                let bone_id = BoneId(self.tracks.len());
+                self.bones.insert(path.entity().clone(), bone_id);
+                self.tracks.push(Bone {
+                    id: bone_id,
+                    entity: None,
+                    tracks: Default::default(),
+                });
+                bone_id
+            };
+
+            let bone_tracks = &mut self.tracks[bone_id.0];
+            let key = Hashed::new(path.field().clone());
+            if let Some(track) = bone_tracks.tracks.get_mut(&key) {
+                track.add_generic_curve(clip_id, curve.as_ref()).unwrap();
+            } else {
+                bone_tracks.tracks.insert(key, curve.into_track(clip_id));
+            }
+        }
+
+        Ok(())
+    }
+
+    pub(super) fn bones(&self) -> impl Iterator<Item = &Bone> {
+        self.tracks.iter()
+    }
+
+    pub(super) fn find_bone(&self, path: &EntityPath) -> Option<&Bone> {
+        self.bones
+            .get(&path)
+            .copied()
+            .map(|bone_id| &self.tracks[bone_id.0])
+    }
+
+    pub(super) fn find_bone_mut(&mut self, path: &EntityPath) -> Option<&mut Bone> {
+        self.bones
+            .get(&path)
+            .copied()
+            .map(|bone_id| &mut self.tracks[bone_id.0])
     }
 }
 

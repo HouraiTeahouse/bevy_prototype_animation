@@ -4,8 +4,12 @@ mod track;
 pub(crate) use node::*;
 pub(crate) use track::*;
 
-use crate::{clip::AnimationClip, path::PropertyPath, Animatable};
-use bevy_ecs::component::Component;
+use crate::{
+    clip::AnimationClip,
+    path::{EntityPath, PropertyPath},
+    Animatable,
+};
+use bevy_ecs::{component::Component, prelude::Entity};
 use bevy_reflect::Reflect;
 use bevy_utils::Hashed;
 use std::collections::VecDeque;
@@ -147,26 +151,22 @@ impl AnimationGraph {
         self.state.advance_time(delta_time);
     }
 
-    /// Gets an iterator over all of the animated properties supported by the
-    /// graph.
-    pub fn properties(&self) -> impl Iterator<Item = &Hashed<PropertyPath>> {
-        self.clips.properties()
+    pub fn bones(&self) -> impl Iterator<Item = &Bone> {
+        self.clips.bones()
     }
 
-    /// Samples and applies a single property from the current state of the
-    /// graph. If the graph has been mutated, it must be separately evaluated
-    /// via [`evalaute`] before the values made by this function are updated.
-    pub fn apply(&self, property: &Hashed<PropertyPath>, output: &mut dyn Reflect) {
-        // TODO: Handle the errors here.
-        self.clips.sample_property(property, &self.state, output);
+    pub fn find_bone(&self, path: &EntityPath) -> Option<&Bone> {
+        self.clips.find_bone(path)
     }
 
-    /// Samples a single property value from the current state of the graph.
-    /// If the graph has been mutated, it must be separately evaluated via
-    /// [`evalaute`] before the values made by this function are updated.
-    pub fn sample<T: Animatable>(&self, property: &Hashed<PropertyPath>) -> Result<T, ()> {
-        // TODO: Handle the errors here.
-        Ok(self.clips.sample(property, &self.state).unwrap())
+    pub fn find_bone_mut(&mut self, path: &EntityPath) -> Option<&mut Bone> {
+        self.clips.find_bone_mut(path)
+    }
+
+    pub(crate) fn update_bone(&mut self, path: &EntityPath, entity: Option<Entity>) {
+        if let Some(bone) = self.find_bone_mut(path) {
+            bone.set_entity(entity);
+        }
     }
 
     /// Sets the time for a given node. If the node is set to propagate its

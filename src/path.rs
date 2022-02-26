@@ -19,8 +19,12 @@ pub struct EntityPath {
 impl EntityPath {
     const SEPERATOR: &'static str = "/";
 
-    pub fn iter(&self) -> impl Iterator<Item = &'_ str> {
-        self.parts.iter().map(|part| part.as_ref())
+    pub fn from_parts(parts: Vec<Cow<'static, str>>) -> Self {
+        Self { parts }
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &'_ Cow<'static, str>> {
+        self.parts.iter()
     }
 
     pub fn iter_mut(&mut self) -> impl Iterator<Item = &'_ mut Cow<'static, str>> {
