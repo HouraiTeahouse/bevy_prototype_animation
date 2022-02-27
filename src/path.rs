@@ -73,6 +73,14 @@ pub struct FieldPath {
 impl FieldPath {
     const SEPERATOR: &'static str = ".";
 
+    pub fn component_name(&self) -> &str {
+        self.parts.first().unwrap()
+    }
+
+    pub fn field_path(&self) -> String {
+        self.parts[1..].join(".")
+    }
+
     pub fn iter(&self) -> impl Iterator<Item = &'_ str> {
         self.parts.iter().map(|part| part.as_ref())
     }

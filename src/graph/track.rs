@@ -3,7 +3,7 @@ use crate::{
     clip::{ClipCurve, CurveWrapper},
     curve::Curve,
     graph::GraphState,
-    path::{EntityPath, FieldPath, PropertyPath},
+    path::{EntityPath, FieldPath},
     Animatable, BlendInput,
 };
 use bevy_ecs::prelude::Entity;
@@ -113,6 +113,10 @@ impl GraphClips {
         }
 
         Ok(())
+    }
+
+    pub(super) fn get_bone(&self, id: BoneId) -> Option<&Bone> {
+        self.tracks.get(id.0)
     }
 
     pub(super) fn bones(&self) -> impl Iterator<Item = &Bone> {

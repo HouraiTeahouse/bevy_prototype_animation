@@ -1,17 +1,12 @@
+mod hierarchy;
 mod node;
 mod track;
 
 pub(crate) use node::*;
 pub(crate) use track::*;
 
-use crate::{
-    clip::AnimationClip,
-    path::{EntityPath, PropertyPath},
-    Animatable,
-};
+use crate::{clip::AnimationClip, path::EntityPath};
 use bevy_ecs::{component::Component, prelude::Entity};
-use bevy_reflect::Reflect;
-use bevy_utils::Hashed;
 use std::collections::VecDeque;
 
 #[derive(Default, Debug)]
@@ -161,6 +156,10 @@ impl AnimationGraph {
 
     pub fn find_bone_mut(&mut self, path: &EntityPath) -> Option<&mut Bone> {
         self.clips.find_bone_mut(path)
+    }
+
+    pub(crate) fn get_bone(&self, id: BoneId) -> Option<&Bone> {
+        self.clips.get_bone(id)
     }
 
     pub(crate) fn update_bone(&mut self, path: &EntityPath, entity: Option<Entity>) {
