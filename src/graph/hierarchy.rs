@@ -1,7 +1,7 @@
 use crate::graph::{track::BoneId, AnimationGraph};
 use bevy_ecs::prelude::*;
 use bevy_log::warn;
-use bevy_reflect::{ReflectMut, TypeRegistry, TypeRegistryArc};
+use bevy_reflect::{GetPath, ReflectMut, TypeRegistry, TypeRegistryArc};
 use bevy_tasks::ComputeTaskPool;
 use std::ops::Deref;
 
@@ -48,7 +48,7 @@ fn animate_entity(
 
     for property in bone.properties() {
         let component_name = property.component_name();
-        let mut component = type_registry
+        let component = type_registry
             .get_with_name(property.component_name())
             .and_then(|registration| registration.data::<ReflectComponent>())
             // SAFE: Each entity is only accessed by one thread at a given time in
@@ -57,26 +57,16 @@ fn animate_entity(
             .and_then(|reflect| unsafe { reflect.reflect_component_unchecked_mut(world, entity) });
 
         if let Some(mut comp) = component {
-            match comp.reflect_mut() {
-                ReflectMut::Struct(component) => {
-                    if let Some(field) = component.field_mut(&property.field_path()) {
-                        bone.sample_property(property, &graph.state, field);
-                    } else {
-                        warn!(
-                            "Failed to animate '{}'. Struct '{}' has no field {}.",
-                            property.deref(),
-                            property.component_name(),
-                            property.field_path(),
-                        );
-                    }
-                }
-                _ => {
-                    warn!(
-                        "Failed to animate '{}'. Non-struct components currently cannot be animated.",
-                        property.deref(),
-                    );
-                }
+            if let Ok(field) = comp.as_mut().path_mut(&property.field_path()) {
+                bone.sample_property(property, &graph.state, field);
             }
+        } else {
+            warn!(
+                "Failed to animate '{}'. Struct '{}' has no field {}.",
+                property.deref(),
+                property.component_name(),
+                property.field_path(),
+            );
         }
     }
     Some(())
