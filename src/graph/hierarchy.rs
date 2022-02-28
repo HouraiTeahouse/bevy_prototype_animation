@@ -46,7 +46,8 @@ fn animate_entity(
         return None;
     }
 
-    for property in bone.properties() {
+    for track in bone.tracks() {
+        let property = track.property;
         let component_name = property.component_name();
         let component = type_registry
             .get_with_name(property.component_name())
@@ -58,7 +59,7 @@ fn animate_entity(
 
         if let Some(mut comp) = component {
             if let Ok(field) = comp.as_mut().path_mut(&property.field_path()) {
-                bone.sample_property(property, &graph.state, field);
+                track.track.blend_via_reflect(&graph.state, field);
             }
         } else {
             warn!(
