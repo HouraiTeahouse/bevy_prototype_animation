@@ -12,6 +12,7 @@ bevy_log = { git = "https://github.com/bevyengine/bevy.git" }
 bevy_math = { git = "https://github.com/bevyengine/bevy.git" }
 bevy_reflect = { git = "https://github.com/bevyengine/bevy.git", features = ["glam"] }
 bevy_transform = { git = "https://github.com/bevyengine/bevy.git" }
+bevy_tasks = { git = "https://github.com/bevyengine/bevy.git" }
 bevy_utils = { git = "https://github.com/bevyengine/bevy.git" }
 serde = "1.0"
 parallel_vec = "0.2"

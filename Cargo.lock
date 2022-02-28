@@ -219,6 +219,7 @@ dependencies = [
  "bevy_log",
  "bevy_math",
  "bevy_reflect",
+ "bevy_tasks",
  "bevy_transform",
  "bevy_utils",
  "parallel_vec",

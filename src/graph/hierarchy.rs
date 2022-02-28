@@ -1,8 +1,11 @@
 use crate::graph::{track::BoneId, AnimationGraph};
 use bevy_ecs::prelude::*;
 use bevy_log::warn;
-use bevy_reflect::{ReflectMut, TypeRegistryArc};
+use bevy_reflect::{ReflectMut, TypeRegistry, TypeRegistryArc};
+use bevy_tasks::ComputeTaskPool;
 use std::ops::Deref;
+
+const BINDING_BATCCH_SIZE: usize = 8;
 
 #[derive(Component)]
 pub(crate) struct BoneBinding {
@@ -16,23 +19,26 @@ fn animate_entities_system(
     entities: Query<(Entity, &BoneBinding)>,
     graphs: Query<&AnimationGraph>,
     type_registry: Res<TypeRegistryArc>,
+    task_pool: Res<ComputeTaskPool>,
     mut commands: Commands,
 ) {
-    // TODO: Consider parallelizing this via ReflectComponent::reflect_component_unchecked_mut
-    for (entity, binding) in entities.iter() {
-        let result = animate_entity(entity, binding, &graphs, &type_registry, world);
-        if result.is_none() {
-            commands.entity(entity).remove::<BoneBinding>();
-        }
-    }
+    let world: &World = &*world;
+    let type_registry = type_registry.read();
+    entities.par_for_each(&*task_pool, BINDING_BATCCH_SIZE, |(entity, binding)| {
+        animate_entity(entity, binding, &graphs, &type_registry, world);
+        // Properly parallelize remove command generation
+        // if result.is_none() {
+        //     commands.entity(entity).remove::<BoneBinding>();
+        // }
+    });
 }
 
 fn animate_entity(
     entity: Entity,
     binding: &BoneBinding,
     graphs: &Query<&AnimationGraph>,
-    type_registry: &TypeRegistryArc,
-    world: &mut World,
+    type_registry: &TypeRegistry,
+    world: &World,
 ) -> Option<()> {
     let graph = graphs.get(binding.graph).ok()?;
     let bone = graph.get_bone(binding.bone_id)?;
@@ -40,13 +46,15 @@ fn animate_entity(
         return None;
     }
 
-    let type_registry = type_registry.read();
     for property in bone.properties() {
         let component_name = property.component_name();
         let mut component = type_registry
             .get_with_name(property.component_name())
             .and_then(|registration| registration.data::<ReflectComponent>())
-            .and_then(|reflect| reflect.reflect_component_mut(world, entity));
+            // SAFE: Each entity is only accessed by one thread at a given time in
+            // an exclusive system. Only one component on every is accessed at a
+            // given time.
+            .and_then(|reflect| unsafe { reflect.reflect_component_unchecked_mut(world, entity) });
 
         if let Some(mut comp) = component {
             match comp.reflect_mut() {
@@ -64,9 +72,9 @@ fn animate_entity(
                 }
                 _ => {
                     warn!(
-			"Failed to animate '{}'. Non-struct components currently cannot be animated.",
-			property.deref(),
-			);
+                        "Failed to animate '{}'. Non-struct components currently cannot be animated.",
+                        property.deref(),
+                    );
                 }
             }
         }
