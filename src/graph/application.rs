@@ -87,7 +87,7 @@ fn animate_entity(
         let property = track.property;
         let component_name = property.component_name();
         let component = type_registry
-            .get_with_name(property.component_name())
+            .get(property.component_type_id())
             .and_then(|registration| registration.data::<ReflectComponent>())
             // SAFE: Each entity is only accessed by one thread at a given time in
             // an exclusive system. Only one component on every is accessed at a

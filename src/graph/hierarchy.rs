@@ -13,18 +13,18 @@ use bevy_utils::HashSet;
 pub(crate) fn dirty_hierarchy_system(
     mut graphs: Query<&mut AnimationGraph>,
     changed: Query<(Entity, Option<&PreviousParent>), Or<(Changed<Parent>, Changed<Name>)>>,
-//     removed: Query<&PreviousParent, Without<Parent>>,
+    //     removed: Query<&PreviousParent, Without<Parent>>,
     parents: Query<&Parent, With<Name>>,
     mut open_set: Local<Vec<Entity>>,
     mut visited: Local<HashSet<Entity>>,
 ) {
     // Check both the current entity's hierarchy and its previous one
     // as it may have moved into or out of a animator hierarchy.
-//     open_set.extend(removed.iter().map(|pp| pp.0));
+    //     open_set.extend(removed.iter().map(|pp| pp.0));
     for (entity, previous) in changed.iter() {
         open_set.push(entity);
         if let Some(prev) = previous {
-        //     open_set.push(prev.0);
+            //     open_set.push(prev.0);
         }
     }
     // Bubble up change and mark all graphs in the ancestor path as dirty
@@ -84,12 +84,11 @@ fn find_bone<'a>(
     names: &Query<&Name>,
 ) -> Option<Entity> {
     let mut current = root;
-    for fragment in path.iter().map(AsRef::as_ref) {
-	let fragment = Name::new(fragment.to_string());
+    for fragment in path.iter() {
         let mut found = false;
         for child in children.get(current).ok()?.iter() {
             if let Ok(name) = names.get(*child) {
-                if name == &fragment {
+                if name == fragment {
                     found = true;
                     current = *child;
                     break;
