@@ -38,6 +38,16 @@ impl EntityPath {
     pub fn pop(&mut self) -> Option<Cow<'static, str>> {
         self.parts.pop()
     }
+
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.parts.len()
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.parts.is_empty()
+    }
 }
 
 impl FromStr for EntityPath {

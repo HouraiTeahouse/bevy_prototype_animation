@@ -8,7 +8,7 @@ use crate::{
 };
 use bevy_ecs::prelude::Entity;
 use bevy_reflect::Reflect;
-use bevy_utils::HashMap;
+use bevy_utils::{HashMap, HashSet};
 use std::{
     any::{Any, TypeId},
     sync::Arc,
@@ -61,9 +61,29 @@ pub(super) struct GraphClips {
     bones: HashMap<EntityPath, BoneId>,
     // Indexed by BoneId
     tracks: Vec<Bone>,
+    hierarchy: HashSet<Entity>,
+    pub(super) dirty: bool,
 }
 
 impl GraphClips {
+    #[inline(always)]
+    pub(super) fn is_dirty(&self) -> bool {
+        self.dirty
+    }
+
+    #[inline(always)]
+    pub(super) fn set_dirty(&mut self, dirty: bool) {
+        self.dirty = dirty;
+    }
+
+    pub(super) fn update_hierarchy(&mut self, entities: HashSet<Entity>) {
+        self.hierarchy = entities;
+    }
+
+    pub(super) fn is_affected_by(&self, entities: &HashSet<Entity>) -> bool {
+        !self.hierarchy.is_disjoint(entities)
+    }
+
     pub(super) fn add_clip(
         &mut self,
         clip_id: ClipId,
@@ -94,6 +114,7 @@ impl GraphClips {
                     entity: None,
                     tracks: Default::default(),
                 });
+                self.dirty = true;
                 bone_id
             };
 

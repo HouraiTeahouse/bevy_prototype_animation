@@ -1,5 +1,5 @@
-mod application;
-mod hierarchy;
+pub(crate) mod application;
+pub(crate) mod hierarchy;
 mod node;
 mod track;
 

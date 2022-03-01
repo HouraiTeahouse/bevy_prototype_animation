@@ -23,6 +23,8 @@ use bevy_transform::{prelude::*, TransformSystem};
 #[derive(Clone, Debug, SystemLabel, PartialEq, Eq, Hash)]
 pub enum AnimationSystem {
     GraphEvaluation,
+    GraphHierarchyDirtyCheck,
+    GraphHierarchyBind,
     GraphSamplingSkeletal,
     GraphSamplingGeneric,
 }
@@ -34,17 +36,18 @@ impl Plugin for AnimationPlugin {
         app.add_asset::<clip::AnimationClip>()
             .add_system(evaluate_graph_system.label(AnimationSystem::GraphEvaluation))
             .add_system(
-                sample_graphs_skeletal_system
-                    .label(AnimationSystem::GraphSamplingSkeletal)
-                    .after(AnimationSystem::GraphEvaluation)
-                    .before(TransformSystem::TransformPropagate),
+                graph::hierarchy::dirty_hierarchy_system
+                    .label(AnimationSystem::GraphHierarchyDirtyCheck),
             )
             .add_system(
-                sample_graphs_generic_system
+                graph::hierarchy::bind_hierarchy_system.label(AnimationSystem::GraphHierarchyBind),
+            )
+            .add_system(
+                graph::application::animate_entities_system
                     .exclusive_system()
                     .label(AnimationSystem::GraphSamplingGeneric)
-                    .after(AnimationSystem::GraphEvaluation)
-                    .before(TransformSystem::TransformPropagate),
+                    .after(AnimationSystem::GraphHierarchyBind)
+                    .after(AnimationSystem::GraphEvaluation),
             );
     }
 }
@@ -55,15 +58,3 @@ pub fn evaluate_graph_system(mut graphs: Query<&mut AnimationGraph, Changed<Anim
         graph.evaluate();
     }
 }
-
-pub fn sample_graphs_skeletal_system(
-    graphs: Query<&AnimationGraph, Changed<AnimationGraph>>,
-    transforms: Query<&mut Transform>,
-) {
-}
-
-/// Samples the current state of all updated [`AnimationGraph`]s and applies the sampled values
-/// to the applicable
-///
-/// This must be used as an exclusive system due to
-pub fn sample_graphs_generic_system(world: &mut World) {}

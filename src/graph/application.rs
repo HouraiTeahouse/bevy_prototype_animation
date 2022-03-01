@@ -9,14 +9,16 @@ use std::ops::Deref;
 const BINDING_BATCCH_SIZE: usize = 8;
 
 #[derive(Component)]
-pub(super) struct BoneBinding {
+pub(crate) struct BoneBinding {
     pub(super) graph: Entity,
     pub(super) bone_id: BoneId,
 }
 
 // This MUST be used as an exclusive system for aliasing safety.
-fn animate_entities_system(
-    world: &mut World,
+// The immutable reference to the a World is used mutably in an unsafe
+// manner if simultaneous World access is allowed.
+pub(crate) fn animate_entities_system(
+    world: &World,
     entities: Query<(Entity, &BoneBinding)>,
     graphs: Query<(&AnimationGraph, ChangeTrackers<AnimationGraph>)>,
     type_registry: Res<TypeRegistryArc>,
@@ -33,7 +35,6 @@ fn animate_entities_system(
         return;
     }
 
-    let world: &World = &*world;
     let type_registry = type_registry.read();
     entities.par_for_each(&*task_pool, BINDING_BATCCH_SIZE, |(entity, binding)| {
         if animate_entity(entity, binding, &graphs, &type_registry, world).is_ok() {
