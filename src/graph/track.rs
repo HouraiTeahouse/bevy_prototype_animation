@@ -12,6 +12,7 @@ use bevy_utils::{HashMap, HashSet};
 use std::{
     any::{Any, TypeId},
     sync::Arc,
+    collections::BTreeMap,
 };
 
 pub(crate) struct BoneTrack<'a> {
@@ -26,7 +27,10 @@ pub struct Bone {
     pub(super) id: BoneId,
     pub(super) path: EntityPath,
     pub(super) entity: Option<Entity>,
-    pub(super) tracks: HashMap<FieldPath, Box<dyn Track + 'static>>,
+    // BTreeMap is used here as it's iteration is O(size) not O(capacity).
+    // like HashMap. The lexographic ordering of FieldPath also ensures that the 
+    // fields on the same component applied close together during application.
+    pub(super) tracks: BTreeMap<FieldPath, Box<dyn Track + 'static>>,
 }
 
 impl Bone {
