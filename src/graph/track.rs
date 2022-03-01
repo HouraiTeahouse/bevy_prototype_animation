@@ -23,9 +23,10 @@ pub(crate) struct BoneTrack<'a> {
 pub struct BoneId(usize);
 
 pub struct Bone {
-    id: BoneId,
-    entity: Option<Entity>,
-    tracks: HashMap<FieldPath, Box<dyn Track + 'static>>,
+    pub(super) id: BoneId,
+    pub(super) path: EntityPath,
+    pub(super) entity: Option<Entity>,
+    pub(super) tracks: HashMap<FieldPath, Box<dyn Track + 'static>>,
 }
 
 impl Bone {
@@ -89,6 +90,7 @@ impl GraphClips {
                 self.bones.insert(path.entity().clone(), bone_id);
                 self.tracks.push(Bone {
                     id: bone_id,
+                    path: path.entity().clone(),
                     entity: None,
                     tracks: Default::default(),
                 });
@@ -114,6 +116,10 @@ impl GraphClips {
 
     pub(super) fn bones(&self) -> impl Iterator<Item = &Bone> {
         self.tracks.iter()
+    }
+
+    pub(super) fn bones_mut(&mut self) -> impl Iterator<Item = &mut Bone> {
+        self.tracks.iter_mut()
     }
 
     pub(super) fn find_bone(&self, path: &EntityPath) -> Option<&Bone> {

@@ -1,3 +1,4 @@
+mod application;
 mod hierarchy;
 mod node;
 mod track;
@@ -148,6 +149,10 @@ impl AnimationGraph {
 
     pub fn bones(&self) -> impl Iterator<Item = &Bone> {
         self.clips.bones()
+    }
+
+    pub(crate) fn bones_mut(&mut self) -> impl Iterator<Item = &mut Bone> {
+        self.clips.bones_mut()
     }
 
     pub fn find_bone(&self, path: &EntityPath) -> Option<&Bone> {
