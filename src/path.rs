@@ -2,8 +2,10 @@ use bevy_core::Name;
 use bevy_reflect::TypeRegistry;
 use std::any::TypeId;
 use std::borrow::Cow;
+use std::cmp::Ordering;
 use std::convert::Infallible;
 use std::fmt;
+use std::ops::Range;
 use std::str::FromStr;
 
 /// A named path through a hierarchy of entities.
@@ -83,10 +85,12 @@ impl fmt::Display for EntityPath {
 /// This represents a String-like path taking the form of "root.a.b.c.d".
 ///
 /// This type comes pre-split into individual levels, unlike a normal string.
-#[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct FieldPath {
     component_type_id: TypeId,
-    parts: Vec<String>,
+    component_name: String,
+    field_path: String,
+    ranges: Vec<Range<usize>>,
 }
 
 impl FieldPath {
@@ -94,27 +98,37 @@ impl FieldPath {
 
     pub fn parse(registry: &TypeRegistry, path: &str) -> Result<Self, ParsePathError> {
         let mut type_id = None;
-        let mut parts = Vec::new();
+        let mut component_name = None;
+        let mut field_path = String::with_capacity(path.len());
+        let mut ranges = Vec::new();
+        let mut start = 0;
         for (idx, part) in path.split(Self::SEPERATOR).enumerate() {
             if part.is_empty() {
                 return Err(ParsePathError::ContainsEmptyField);
-            }
-            if part.contains(char::is_whitespace) {
+            } else if part.contains(char::is_whitespace) {
                 return Err(ParsePathError::FieldContainsWhitespace);
             }
             if idx == 0 {
                 if let Some(registration) = registry.get_with_name(part) {
                     type_id = Some(registration.type_id());
+                    component_name = Some(part.to_string());
                 } else {
                     return Err(ParsePathError::InvalidComponentType);
                 }
+            } else {
+                field_path.extend(Self::SEPERATOR.chars());
+                start += 1;
             }
-            parts.push(part.to_string().into());
+            field_path.extend(part.chars());
+            ranges.push(start..field_path.len());
+            start = field_path.len();
         }
-        if type_id.is_some() {
+        if type_id.is_some() && component_name.is_some() {
             Ok(Self {
                 component_type_id: type_id.unwrap(),
-                parts,
+                component_name: component_name.unwrap(),
+                field_path,
+                ranges,
             })
         } else {
             Err(ParsePathError::NoComponentName)
@@ -126,43 +140,56 @@ impl FieldPath {
     }
 
     pub fn component_name(&self) -> &str {
-        self.parts[0].as_ref()
+        self.component_name.as_ref()
     }
 
-    pub fn field_path(&self) -> String {
-        self.parts[1..].join(".")
+    pub fn field_path(&self) -> &str {
+        self.field_path.as_ref()
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &String> {
-        self.parts.iter()
+    pub fn iter(&self) -> impl Iterator<Item = &str> {
+        self.ranges
+            .iter()
+            .cloned()
+            .map(|range| &self.field_path[range])
     }
 
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut String> {
-        self.parts.iter_mut()
+    pub fn push(&mut self, part: &str) {
+        self.field_path.extend(Self::SEPERATOR.chars());
+        let start = self.field_path.len();
+        self.field_path.extend(part.chars());
+        self.ranges.push(start..self.field_path.len());
     }
 
-    pub fn push(&mut self, part: impl Into<String>) {
-        self.parts.push(part.into())
-    }
-
-    pub fn pop(&mut self) -> Option<String> {
-        if self.parts.len() > 1 {
-            self.parts.pop()
-        } else {
-            None
+    pub fn pop(&mut self) {
+        if self.ranges.len() > 1 {
+            self.ranges.pop();
+            self.field_path.truncate(self.ranges.last().unwrap().end);
         }
     }
 }
 
 impl fmt::Display for FieldPath {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for (idx, part) in self.parts.iter().enumerate() {
-            if idx > 0 {
-                f.write_str(Self::SEPERATOR)?;
-            }
-            f.write_str(part.as_ref())?;
-        }
-        Ok(())
+        f.write_str(self.component_name.as_ref())?;
+        f.write_str(Self::SEPERATOR)?;
+        f.write_str(self.field_path.as_ref())
+    }
+}
+
+impl PartialOrd for FieldPath {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(
+            self.component_name
+                .cmp(&other.component_name)
+                .then(self.field_path.cmp(&other.field_path)),
+        )
+    }
+}
+
+impl Ord for FieldPath {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.partial_cmp(other).unwrap()
     }
 }
 
@@ -249,16 +276,16 @@ mod test {
     pub fn test_parse_entity_path() {
         let path_str = "a/b/c/d/e/f//g";
         let path = EntityPath::from_str(path_str).unwrap();
-        let vec: Vec<_> = path.iter().collect();
+        let vec: Vec<_> = path.iter().map(AsRef::as_ref).collect();
         assert_eq!(vec, vec!["a", "b", "c", "d", "e", "f", "", "g"]);
     }
 
     #[test]
     pub fn test_parse_entity_path_ignore_leading_backslash() {
-        let path_str = "///a/b/c/d/e/f//g";
+        let path_str = "///a/b/c/dead/e/f//g";
         let path = EntityPath::from_str(path_str).unwrap();
-        let vec: Vec<_> = path.iter().collect();
-        assert_eq!(vec, vec!["a", "b", "c", "d", "e", "f", "", "g"]);
+        let vec: Vec<_> = path.iter().map(AsRef::as_ref).collect();
+        assert_eq!(vec, vec!["a", "b", "c", "dead", "e", "f", "", "g"]);
     }
 
     #[test]
@@ -302,7 +329,7 @@ mod test {
 
     #[test]
     pub fn test_parse_field_path_invalid_typek() {
-        let mut registry = TypeRegistry::default();
+        let registry = TypeRegistry::default();
         let path_str = "bevy_prototype_animation::path::test::Test.b.c.d.e.f a.g";
         let path = FieldPath::parse(&registry, path_str);
         assert_eq!(path, Err(ParsePathError::InvalidComponentType));
@@ -314,7 +341,7 @@ mod test {
         registry.register::<Test>();
         let path_str = "a/b/c/d/e/f//g@bevy_prototype_animation::path::test::Test.b.c.d.e.f.g";
         let path = PropertyPath::parse(&registry, path_str).unwrap();
-        let entity_vec: Vec<_> = path.entity().iter().collect();
+        let entity_vec: Vec<_> = path.entity().iter().map(AsRef::as_ref).collect();
         let field_vec: Vec<_> = path.field().iter().collect();
         assert_eq!(entity_vec, vec!["a", "b", "c", "d", "e", "f", "", "g"]);
         assert_eq!(
