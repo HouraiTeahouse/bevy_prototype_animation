@@ -70,7 +70,8 @@ impl GraphClips {
     ) -> Result<(), TrackError> {
         // Verify that the types for each of the tracks are identical before adding any of the curves in.
         for (path, curve) in clip.curves.iter() {
-            let valid = self.find_bone(path.entity())
+            let valid = self
+                .find_bone(path.entity())
                 .and_then(|bone| bone.tracks.get(path.field()))
                 .map(|track| curve.value_type_id() == track.value_type_id())
                 .unwrap_or(true);
@@ -98,7 +99,9 @@ impl GraphClips {
             if let Some(track) = bone_tracks.tracks.get_mut(path.field()) {
                 track.add_generic_curve(clip_id, curve.as_ref()).unwrap();
             } else {
-                bone_tracks.tracks.insert(path.field().clone(), curve.into_track(clip_id));
+                bone_tracks
+                    .tracks
+                    .insert(path.field().clone(), curve.into_track(clip_id));
             }
         }
 
