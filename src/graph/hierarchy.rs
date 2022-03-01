@@ -60,7 +60,6 @@ fn find_bone<'a>(
 ) -> Option<(Entity, Vec<Entity>)> {
     let mut seen = Vec::with_capacity(path.len());
     let mut current = root;
-    seen.push(root);
     for fragment in path.iter().map(AsRef::as_ref) {
         let mut found = false;
         for child in children.get(current).ok()?.iter() {
