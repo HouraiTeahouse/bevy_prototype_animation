@@ -61,7 +61,6 @@ pub(super) struct GraphClips {
     bones: HashMap<EntityPath, BoneId>,
     // Indexed by BoneId
     tracks: Vec<Bone>,
-    hierarchy: HashSet<Entity>,
     pub(super) dirty: bool,
 }
 
@@ -74,14 +73,6 @@ impl GraphClips {
     #[inline(always)]
     pub(super) fn set_dirty(&mut self, dirty: bool) {
         self.dirty = dirty;
-    }
-
-    pub(super) fn update_hierarchy(&mut self, entities: HashSet<Entity>) {
-        self.hierarchy = entities;
-    }
-
-    pub(super) fn is_affected_by(&self, entities: &HashSet<Entity>) -> bool {
-        !self.hierarchy.is_disjoint(entities)
     }
 
     pub(super) fn add_clip(
