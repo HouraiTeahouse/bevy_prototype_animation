@@ -37,17 +37,21 @@ impl Plugin for AnimationPlugin {
             .add_system(evaluate_graph_system.label(AnimationSystem::GraphEvaluation))
             .add_system(
                 graph::hierarchy::dirty_hierarchy_system
-                    .label(AnimationSystem::GraphHierarchyDirtyCheck),
+                    .label(AnimationSystem::GraphHierarchyDirtyCheck)
+                    .after(TransformSystem::ParentUpdate),
             )
             .add_system(
-                graph::hierarchy::bind_hierarchy_system.label(AnimationSystem::GraphHierarchyBind),
+                graph::hierarchy::bind_hierarchy_system
+                    .label(AnimationSystem::GraphHierarchyBind)
+                    .after(AnimationSystem::GraphHierarchyDirtyCheck),
             )
             .add_system(
                 graph::application::animate_entities_system
                     .exclusive_system()
                     .label(AnimationSystem::GraphSamplingGeneric)
                     .after(AnimationSystem::GraphHierarchyBind)
-                    .after(AnimationSystem::GraphEvaluation),
+                    .after(AnimationSystem::GraphEvaluation)
+                    .before(TransformSystem::TransformPropagate),
             );
     }
 }
