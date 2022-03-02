@@ -179,9 +179,11 @@ impl fmt::Display for FieldPath {
 
 impl PartialOrd for FieldPath {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        // As the component name is going to be the same if the type ID
+        // is the same, order on the type ID instead.
         Some(
-            self.component_name
-                .cmp(&other.component_name)
+            self.component_type_id
+                .cmp(&other.component_type_id)
                 .then(self.field_path.cmp(&other.field_path)),
         )
     }
