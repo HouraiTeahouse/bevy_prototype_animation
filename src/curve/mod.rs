@@ -1,4 +1,5 @@
 use crate::Animatable;
+use bevy_asset::{Asset, Handle, HandleId};
 use thiserror::Error;
 
 pub mod compressed;
@@ -92,6 +93,30 @@ pub fn resample_preserving_loop<T: Animatable + Clone>(
     // keyframes[frame_count - 1] = self.value_at((self.len() - 1) as KeyframeIndex);
 
     CurveFixed::from_keyframes_with_offset(frame_rate, frame_offset, keyframes)
+}
+
+impl<C: Curve<HandleId>, T: Asset> Curve<Handle<T>> for C {
+    fn duration(&self) -> f32 {
+        <Self as Curve<HandleId>>::duration(self)
+    }
+
+    fn time_offset(&self) -> f32 {
+        <Self as Curve<HandleId>>::time_offset(self)
+    }
+
+    fn keyframe_count(&self) -> usize {
+        <Self as Curve<HandleId>>::keyframe_count(self)
+    }
+
+    fn sample(&self, time: f32) -> Handle<T> {
+        let id = <Self as Curve<HandleId>>::sample(self, time);
+        Handle::<T>::weak(id)
+    }
+
+    fn sample_with_cursor(&self, cursor: KeyframeIndex, time: f32) -> (KeyframeIndex, Handle<T>) {
+        let (cursor, id) = <Self as Curve<HandleId>>::sample_with_cursor(self, cursor, time);
+        (cursor, Handle::<T>::weak(id))
+    }
 }
 
 #[derive(Error, Debug)]
