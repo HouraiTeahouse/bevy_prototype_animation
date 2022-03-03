@@ -1,6 +1,7 @@
 use crate::util;
-use bevy_asset::{Asset, Handle, HandleId};
+use bevy_asset::{Asset, Assets, Handle, HandleId};
 use bevy_core::FloatOrd;
+use bevy_ecs::world::World;
 use bevy_math::*;
 use bevy_reflect::Reflect;
 use bevy_transform::prelude::Transform;
@@ -14,6 +15,16 @@ pub struct BlendInput<T> {
 pub trait Animatable: Reflect + Sized + Send + Sync + 'static {
     fn interpolate(a: &Self, b: &Self, time: f32) -> Self;
     fn blend(inputs: impl Iterator<Item = BlendInput<Self>>) -> Self;
+
+    /// Post-processes the value using resources in the [`World`].
+    /// Most animatable types do not need to implement this.
+    ///
+    /// # Safety
+    /// All concrete implementors of this function can only read
+    /// into the resources stored in the World. Mutation of any state,
+    /// or reading any component or NonSend resource data may cause
+    /// undefined behavior or data races.
+    unsafe fn post_process(&mut self, world: &World) {}
 }
 
 macro_rules! impl_float_animatable_32 {
@@ -129,7 +140,7 @@ impl Animatable for HandleId {
 impl<T: Asset> Animatable for Handle<T> {
     #[inline]
     fn interpolate(a: &Self, b: &Self, t: f32) -> Self {
-        util::step_unclamped(a.clone(), b.clone(), t)
+        util::step_unclamped(a.clone_weak(), b.clone_weak(), t)
     }
 
     #[inline]
@@ -139,7 +150,23 @@ impl<T: Asset> Animatable for Handle<T> {
             .map(|input| input.value)
             .expect("Attempted to blend Handle with zero inputs.")
     }
+
+    // SAFE: This implementation only reads resources from the provided
+    // World.
+    unsafe fn post_process(&mut self, world: &World) {
+        // Upgrade weak handles into strong ones.
+        if self.is_strong() {
+            return;
+        }
+        *self = world
+            .get_resource::<Assets<T>>()
+            .expect(
+                "Attempted to animate a Handle<T> without the corresponding Assets<T> resource.",
+            )
+            .get_handle(self.id);
+    }
 }
+
 impl Animatable for Transform {
     fn interpolate(a: &Self, b: &Self, t: f32) -> Self {
         Self {

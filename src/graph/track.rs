@@ -6,7 +6,7 @@ use crate::{
     path::{EntityPath, FieldPath},
     Animatable, BlendInput,
 };
-use bevy_ecs::prelude::Entity;
+use bevy_ecs::prelude::{Entity, World};
 use bevy_reflect::Reflect;
 use bevy_utils::{HashMap, HashSet};
 use std::{
@@ -170,20 +170,18 @@ pub(crate) trait Track: Any + Send + Sync + 'static {
         clip_id: ClipId,
         curve: &dyn ClipCurve,
     ) -> Result<(), TrackError>;
-    fn blend_via_reflect(
+
+    /// Blends all of the values in the track and then postprocesses the
+    /// result using the provided [`World`] reference.
+    ///
+    /// # Safety
+    /// The provided [`World`] cannot have be mutated on a different thread.
+    unsafe fn blend_via_reflect(
         &self,
         state: &GraphState,
         output: &mut dyn Reflect,
+        world: &World,
     ) -> Result<(), TrackError>;
-}
-
-impl dyn Track {
-    pub(crate) fn blend<T: Animatable>(&self, state: &GraphState) -> Result<T, TrackError> {
-        match self.as_any().downcast_ref::<CurveTrack<T>>() {
-            Some(track) => Ok(track.sample_and_blend(state)),
-            None => Err(TrackError::IncorrectType),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -249,13 +247,21 @@ impl<T: Animatable> Track for CurveTrack<T> {
         }
     }
 
-    fn blend_via_reflect(
+    unsafe fn blend_via_reflect(
         &self,
         state: &GraphState,
         output: &mut dyn Reflect,
+        world: &World,
     ) -> Result<(), TrackError> {
         if output.any().type_id() == TypeId::of::<T>() {
-            output.apply(&self.sample_and_blend(state));
+            let mut value = self.sample_and_blend(state);
+            if !matches!(value.reflect_partial_eq(output), Some(true)) {
+                // SAFE: Only read-only access to the World's resources is
+                // used here. No mutation nor reading of component/entity
+                // data is done, as required by Animatable::post_process.
+                value.post_process(world);
+                output.apply(&value);
+            }
             Ok(())
         } else {
             Err(TrackError::IncorrectType)

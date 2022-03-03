@@ -92,11 +92,23 @@ fn animate_entity(
             // SAFE: Each entity is only accessed by one thread at a given time in
             // an exclusive system. Only one component on every is accessed at a
             // given time.
+            //
+            // The blend_via_reflect call below will cause simultaneous read-only
+            // access of Resources in a read-only fashion. There are no aliasing
+            // issues as this mutation only affects components.
             .and_then(|reflect| unsafe { reflect.reflect_component_unchecked_mut(world, entity) });
 
         if let Some(mut comp) = component {
             if let Ok(field) = comp.as_mut().path_mut(&property.field_path()) {
-                success |= track.track.blend_via_reflect(&graph.state, field).is_ok();
+                // SAFE: This access is read-only and is required to only access
+                // resources. This cannot cause race conditions as only non-Resource
+                // components are mutated.
+                success |= unsafe {
+                    track
+                        .track
+                        .blend_via_reflect(&graph.state, field, world)
+                        .is_ok()
+                };
             }
         } else {
             warn!(
