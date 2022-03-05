@@ -18,7 +18,7 @@ pub use animatable::*;
 use bevy_app::prelude::*;
 use bevy_asset::prelude::*;
 use bevy_ecs::prelude::*;
-use bevy_transform::{prelude::*, TransformSystem};
+use bevy_transform::TransformSystem;
 
 #[derive(Clone, Debug, SystemLabel, PartialEq, Eq, Hash)]
 pub enum AnimationSystem {

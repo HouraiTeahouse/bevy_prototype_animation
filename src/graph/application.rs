@@ -1,7 +1,7 @@
 use crate::graph::{track::BoneId, AnimationGraph};
 use bevy_ecs::prelude::*;
 use bevy_log::warn;
-use bevy_reflect::{GetPath, ReflectMut, TypeRegistry, TypeRegistryArc};
+use bevy_reflect::{TypeRegistry, TypeRegistryArc};
 use bevy_tasks::ComputeTaskPool;
 use dashmap::DashSet;
 use std::ops::Deref;
@@ -85,7 +85,6 @@ fn animate_entity(
     let mut success = false;
     for track in bone.tracks() {
         let property = track.property;
-        let component_name = property.component_name();
         let component = type_registry
             .get(property.component_type_id())
             .and_then(|registration| registration.data::<ReflectComponent>())
@@ -99,7 +98,7 @@ fn animate_entity(
             .and_then(|reflect| unsafe { reflect.reflect_component_unchecked_mut(world, entity) });
 
         if let Some(mut comp) = component {
-            if let Ok(field) = comp.as_mut().path_mut(&property.field_path()) {
+            if let Ok(field) = property.field_path().field_mut(comp.as_mut()) {
                 // SAFE: This access is read-only and is required to only access
                 // resources. This cannot cause race conditions as only non-Resource
                 // components are mutated.

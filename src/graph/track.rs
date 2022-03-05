@@ -3,12 +3,12 @@ use crate::{
     clip::{ClipCurve, CurveWrapper},
     curve::Curve,
     graph::GraphState,
-    path::{EntityPath, FieldPath},
+    path::{AccessPath, EntityPath},
     Animatable, BlendInput,
 };
 use bevy_ecs::prelude::{Entity, World};
 use bevy_reflect::Reflect;
-use bevy_utils::{HashMap, HashSet};
+use bevy_utils::HashMap;
 use std::{
     any::{Any, TypeId},
     collections::BTreeMap,
@@ -16,7 +16,7 @@ use std::{
 };
 
 pub(crate) struct BoneTrack<'a> {
-    pub property: &'a FieldPath,
+    pub property: &'a AccessPath,
     pub track: &'a (dyn Track + 'static),
 }
 
@@ -30,7 +30,7 @@ pub struct Bone {
     // BTreeMap is used here as it's iteration is O(size) not O(capacity).
     // like HashMap. The lexographic ordering of FieldPath also ensures that the
     // fields on the same component applied close together during application.
-    pub(super) tracks: BTreeMap<FieldPath, Box<dyn Track + 'static>>,
+    pub(super) tracks: BTreeMap<AccessPath, Box<dyn Track + 'static>>,
 }
 
 impl Bone {
@@ -38,7 +38,7 @@ impl Bone {
         self.id
     }
 
-    pub fn properties(&self) -> impl Iterator<Item = &FieldPath> {
+    pub fn properties(&self) -> impl Iterator<Item = &AccessPath> {
         self.tracks.keys()
     }
 
@@ -88,7 +88,7 @@ impl GraphClips {
         for (path, curve) in clip.curves.iter() {
             let valid = self
                 .find_bone(path.entity())
-                .and_then(|bone| bone.tracks.get(path.field()))
+                .and_then(|bone| bone.tracks.get(path.access()))
                 .map(|track| curve.value_type_id() == track.value_type_id())
                 .unwrap_or(true);
 
@@ -114,12 +114,12 @@ impl GraphClips {
             };
 
             let bone_tracks = &mut self.tracks[bone_id.0];
-            if let Some(track) = bone_tracks.tracks.get_mut(path.field()) {
+            if let Some(track) = bone_tracks.tracks.get_mut(path.access()) {
                 track.add_generic_curve(clip_id, curve.as_ref()).unwrap();
             } else {
                 bone_tracks
                     .tracks
-                    .insert(path.field().clone(), curve.into_track(clip_id));
+                    .insert(path.access().clone(), curve.into_track(clip_id));
             }
         }
 

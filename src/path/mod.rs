@@ -1,12 +1,13 @@
 use bevy_core::Name;
 use bevy_reflect::TypeRegistry;
 use std::any::TypeId;
-use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::convert::Infallible;
 use std::fmt;
-use std::ops::Range;
 use std::str::FromStr;
+
+mod field;
+pub use field::{FieldPath, ReflectPathError};
 
 /// A named path through a hierarchy of entities.
 ///
@@ -86,53 +87,30 @@ impl fmt::Display for EntityPath {
 ///
 /// This type comes pre-split into individual levels, unlike a normal string.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub struct FieldPath {
+pub struct AccessPath {
     component_type_id: TypeId,
     component_name: String,
-    field_path: String,
-    ranges: Vec<Range<usize>>,
+    field_path: FieldPath,
 }
 
-impl FieldPath {
+impl AccessPath {
     const SEPERATOR: &'static str = ".";
 
-    pub fn parse(registry: &TypeRegistry, path: &str) -> Result<Self, ParsePathError> {
-        let mut type_id = None;
-        let mut component_name = None;
-        let mut field_path = String::with_capacity(path.len());
-        let mut ranges = Vec::new();
-        let mut start = 0;
-        for (idx, part) in path.split(Self::SEPERATOR).enumerate() {
-            if part.is_empty() {
-                return Err(ParsePathError::ContainsEmptyField);
-            } else if part.contains(char::is_whitespace) {
-                return Err(ParsePathError::FieldContainsWhitespace);
-            }
-            if idx == 0 {
-                if let Some(registration) = registry.get_with_name(part) {
-                    type_id = Some(registration.type_id());
-                    component_name = Some(part.to_string());
-                } else {
-                    return Err(ParsePathError::InvalidComponentType);
-                }
-            } else {
-                field_path.extend(Self::SEPERATOR.chars());
-                start += 1;
-            }
-            field_path.extend(part.chars());
-            ranges.push(start..field_path.len());
-            start = field_path.len();
-        }
-        if type_id.is_some() && component_name.is_some() {
-            Ok(Self {
-                component_type_id: type_id.unwrap(),
-                component_name: component_name.unwrap(),
-                field_path,
-                ranges,
-            })
-        } else {
-            Err(ParsePathError::NoComponentName)
-        }
+    pub fn parse<'a>(
+        registry: &'a TypeRegistry,
+        path: &'a str,
+    ) -> Result<Self, ParsePathError<'a>> {
+        let (component, field) = path
+            .split_once(Self::SEPERATOR)
+            .ok_or(ParsePathError::NoComponentName)?;
+        let registration = registry
+            .get_with_name(component)
+            .ok_or(ParsePathError::InvalidComponentType)?;
+        Ok(Self {
+            component_type_id: registration.type_id(),
+            component_name: component.to_string(),
+            field_path: FieldPath::parse(field)?,
+        })
     }
 
     pub fn component_type_id(&self) -> TypeId {
@@ -143,41 +121,20 @@ impl FieldPath {
         self.component_name.as_ref()
     }
 
-    pub fn field_path(&self) -> &str {
-        self.field_path.as_ref()
-    }
-
-    pub fn iter(&self) -> impl Iterator<Item = &str> {
-        self.ranges
-            .iter()
-            .cloned()
-            .map(|range| &self.field_path[range])
-    }
-
-    pub fn push(&mut self, part: &str) {
-        self.field_path.extend(Self::SEPERATOR.chars());
-        let start = self.field_path.len();
-        self.field_path.extend(part.chars());
-        self.ranges.push(start..self.field_path.len());
-    }
-
-    pub fn pop(&mut self) {
-        if self.ranges.len() > 1 {
-            self.ranges.pop();
-            self.field_path.truncate(self.ranges.last().unwrap().end);
-        }
+    pub fn field_path(&self) -> &FieldPath {
+        &self.field_path
     }
 }
 
-impl fmt::Display for FieldPath {
+impl fmt::Display for AccessPath {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.component_name.as_ref())?;
         f.write_str(Self::SEPERATOR)?;
-        f.write_str(self.field_path.as_ref())
+        self.field_path.fmt(f)
     }
 }
 
-impl PartialOrd for FieldPath {
+impl PartialOrd for AccessPath {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         // As the component name is going to be the same if the type ID
         // is the same, order on the type ID instead.
@@ -189,7 +146,7 @@ impl PartialOrd for FieldPath {
     }
 }
 
-impl Ord for FieldPath {
+impl Ord for AccessPath {
     fn cmp(&self, other: &Self) -> Ordering {
         self.partial_cmp(other).unwrap()
     }
@@ -204,17 +161,20 @@ impl Ord for FieldPath {
 #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct PropertyPath {
     entity: EntityPath,
-    field: FieldPath,
+    access: AccessPath,
 }
 
 impl PropertyPath {
     const SEPERATOR: char = '@';
 
-    pub fn parse(registry: &TypeRegistry, path: &str) -> Result<Self, ParsePathError> {
-        if let Some((entity, field)) = path.split_once(Self::SEPERATOR) {
+    pub fn parse<'a>(
+        registry: &'a TypeRegistry,
+        path: &'a str,
+    ) -> Result<Self, ParsePathError<'a>> {
+        if let Some((entity, access)) = path.split_once(Self::SEPERATOR) {
             Ok(Self {
                 entity: EntityPath::from_str(entity).unwrap(),
-                field: FieldPath::parse(registry, field)?,
+                access: AccessPath::parse(registry, access)?,
             })
         } else {
             Err(ParsePathError::MissingDelimiter)
@@ -222,43 +182,38 @@ impl PropertyPath {
     }
 
     /// Constructs a [`PropertyPath`] from it's consistituent parts.
-    pub fn from_parts(entity: EntityPath, field: FieldPath) -> Self {
-        Self { entity, field }
+    pub fn from_parts(entity: EntityPath, access: AccessPath) -> Self {
+        Self { entity, access }
     }
 
     /// Splits the property path into it's constituent parts.
-    pub fn into_parts(self) -> (EntityPath, FieldPath) {
-        (self.entity, self.field)
+    pub fn into_parts(self) -> (EntityPath, AccessPath) {
+        (self.entity, self.access)
     }
 
-    /// Gets a immutable reference to the [`EntityPath`] in the full property path.
+    /// Gets a immutable reference to the [`AccessPath`] in the full property path.
     pub fn entity(&self) -> &EntityPath {
         &self.entity
     }
 
-    /// Gets mutable reference to the [`EntityPath`] in the full property path.
-    pub fn entity_mut(&mut self) -> &EntityPath {
-        &mut self.entity
-    }
-
-    /// Gets immutable reference to the [`FieldPath`] in the full property path.
-    pub fn field(&self) -> &FieldPath {
-        &self.field
-    }
-
-    /// Gets mutable reference to the [`FieldPath`] in the full property path.
-    pub fn field_mut(&mut self) -> &FieldPath {
-        &mut self.field
+    /// Gets immutable reference to the [`AccessPath`] in the full property path.
+    pub fn access(&self) -> &AccessPath {
+        &self.access
     }
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub enum ParsePathError {
+pub enum ParsePathError<'a> {
     MissingDelimiter,
-    ContainsEmptyField,
-    FieldContainsWhitespace,
     InvalidComponentType,
     NoComponentName,
+    InvalidFieldPath(ReflectPathError<'a>),
+}
+
+impl<'a> From<ReflectPathError<'a>> for ParsePathError<'a> {
+    fn from(value: ReflectPathError<'a>) -> Self {
+        Self::InvalidFieldPath(value)
+    }
 }
 
 #[cfg(test)]
@@ -291,49 +246,37 @@ mod test {
     }
 
     #[test]
-    pub fn test_parse_field_path() {
+    pub fn test_parse_access_path() {
         let mut registry = TypeRegistry::default();
         registry.register::<Test>();
         let path_str = "bevy_prototype_animation::path::test::Test.b.c.d.e.f.g";
-        let path = FieldPath::parse(&registry, path_str).unwrap();
-        let vec: Vec<_> = path.iter().collect();
+        let path = AccessPath::parse(&registry, path_str).unwrap();
+        let path = path.to_string();
         assert_eq!(
-            vec,
-            vec![
-                "bevy_prototype_animation::path::test::Test",
-                "b",
-                "c",
-                "d",
-                "e",
-                "f",
-                "g"
-            ]
+            path.as_str(),
+            "bevy_prototype_animation::path::test::Test.b.c.d.e.f.g",
         );
     }
 
     #[test]
-    pub fn test_parse_field_path_fails_on_empty_field() {
+    pub fn test_parse_access_path_fails_on_empty_field() {
         let mut registry = TypeRegistry::default();
         registry.register::<Test>();
         let path_str = "bevy_prototype_animation::path::test::Test.b.c.d.e.f..g";
-        let path = FieldPath::parse(&registry, path_str);
-        assert_eq!(path, Err(ParsePathError::ContainsEmptyField));
+        let path = AccessPath::parse(&registry, path_str);
+        assert_eq!(
+            path,
+            Err(ParsePathError::InvalidFieldPath(
+                ReflectPathError::ExpectedIdent { index: 10 }
+            ))
+        );
     }
 
     #[test]
-    pub fn test_parse_field_path_fails_on_whitespace() {
-        let mut registry = TypeRegistry::default();
-        registry.register::<Test>();
-        let path_str = "bevy_prototype_animation::path::test::Test.b.c.d.e.f a.g";
-        let path = FieldPath::parse(&registry, path_str);
-        assert_eq!(path, Err(ParsePathError::FieldContainsWhitespace));
-    }
-
-    #[test]
-    pub fn test_parse_field_path_invalid_typek() {
+    pub fn test_parse_access_path_invalid_typek() {
         let registry = TypeRegistry::default();
         let path_str = "bevy_prototype_animation::path::test::Test.b.c.d.e.f a.g";
-        let path = FieldPath::parse(&registry, path_str);
+        let path = AccessPath::parse(&registry, path_str);
         assert_eq!(path, Err(ParsePathError::InvalidComponentType));
     }
 
@@ -344,19 +287,11 @@ mod test {
         let path_str = "a/b/c/d/e/f//g@bevy_prototype_animation::path::test::Test.b.c.d.e.f.g";
         let path = PropertyPath::parse(&registry, path_str).unwrap();
         let entity_vec: Vec<_> = path.entity().iter().map(AsRef::as_ref).collect();
-        let field_vec: Vec<_> = path.field().iter().collect();
+        let field = path.access().to_string();
         assert_eq!(entity_vec, vec!["a", "b", "c", "d", "e", "f", "", "g"]);
         assert_eq!(
-            field_vec,
-            vec![
-                "bevy_prototype_animation::path::test::Test",
-                "b",
-                "c",
-                "d",
-                "e",
-                "f",
-                "g"
-            ]
+            field.as_str(),
+            "bevy_prototype_animation::path::test::Test.b.c.d.e.f.g",
         );
     }
 
@@ -367,19 +302,11 @@ mod test {
         let path_str = "@bevy_prototype_animation::path::test::Test.b.c.d.e.f.g";
         let path = PropertyPath::parse(&registry, path_str).unwrap();
         let entity_vec: Vec<_> = path.entity().iter().collect();
-        let field_vec: Vec<_> = path.field().iter().collect();
+        let field = path.access().to_string();
         assert!(entity_vec.is_empty());
         assert_eq!(
-            field_vec,
-            vec![
-                "bevy_prototype_animation::path::test::Test",
-                "b",
-                "c",
-                "d",
-                "e",
-                "f",
-                "g"
-            ]
+            field.as_str(),
+            "bevy_prototype_animation::path::test::Test.b.c.d.e.f.g",
         );
     }
 
@@ -389,15 +316,11 @@ mod test {
         registry.register::<Test>();
         let path_str = "a/b/c/d/e/f//g@bevy_prototype_animation::path::test::Test.b.c.d.e.f..g";
         let path = PropertyPath::parse(&registry, path_str);
-        assert_eq!(path, Err(ParsePathError::ContainsEmptyField));
-    }
-
-    #[test]
-    pub fn test_parse_property_path_fails_on_whitespace() {
-        let mut registry = TypeRegistry::default();
-        registry.register::<Test>();
-        let path_str = "a/b/c/d/e/f//g@bevy_prototype_animation::path::test::Test.b.c.d.e.f a.g";
-        let path = PropertyPath::parse(&registry, path_str);
-        assert_eq!(path, Err(ParsePathError::FieldContainsWhitespace));
+        assert_eq!(
+            path,
+            Err(ParsePathError::InvalidFieldPath(
+                ReflectPathError::ExpectedIdent { index: 10 }
+            ))
+        );
     }
 }
