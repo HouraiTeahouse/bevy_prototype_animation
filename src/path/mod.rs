@@ -18,30 +18,20 @@ pub use field::{FieldPath, ReflectPathError};
 /// This type comes pre-split into individual levels, unlike a normal string.
 #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct EntityPath {
-    parts: Vec<Name>,
+    parts: Box<[Name]>,
 }
 
 impl EntityPath {
     const SEPERATOR: &'static str = "/";
 
     pub fn from_parts(parts: Vec<Name>) -> Self {
-        Self { parts }
+        Self {
+            parts: parts.into_boxed_slice(),
+        }
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &Name> {
         self.parts.iter()
-    }
-
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Name> {
-        self.parts.iter_mut()
-    }
-
-    pub fn push(&mut self, part: impl Into<Name>) {
-        self.parts.push(part.into())
-    }
-
-    pub fn pop(&mut self) -> Option<Name> {
-        self.parts.pop()
     }
 
     #[inline]
@@ -58,14 +48,13 @@ impl EntityPath {
 impl FromStr for EntityPath {
     type Err = Infallible;
     fn from_str(src: &str) -> Result<Self, Self::Err> {
-        Ok(Self {
-            parts: src
-                .split(Self::SEPERATOR)
+        Ok(Self::from_parts(
+            src.split(Self::SEPERATOR)
                 .into_iter()
                 .skip_while(|part| part.is_empty())
                 .map(|part| Name::new(part.to_string()))
                 .collect(),
-        })
+        ))
     }
 }
 
@@ -171,14 +160,13 @@ impl PropertyPath {
         registry: &'a TypeRegistry,
         path: &'a str,
     ) -> Result<Self, ParsePathError<'a>> {
-        if let Some((entity, access)) = path.split_once(Self::SEPERATOR) {
-            Ok(Self {
-                entity: EntityPath::from_str(entity).unwrap(),
-                access: AccessPath::parse(registry, access)?,
-            })
-        } else {
-            Err(ParsePathError::MissingDelimiter)
-        }
+        let (entity, access) = path
+            .split_once(Self::SEPERATOR)
+            .ok_or(ParsePathError::MissingDelimiter)?;
+        Ok(Self::from_parts(
+            EntityPath::from_str(entity).unwrap(),
+            AccessPath::parse(registry, access)?,
+        ))
     }
 
     /// Constructs a [`PropertyPath`] from it's consistituent parts.
