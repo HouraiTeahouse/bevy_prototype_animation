@@ -4,7 +4,7 @@ use crate::{
     path::PropertyPath,
     Animatable,
 };
-use bevy_reflect::TypeUuid;
+use bevy_reflect::{TypeUuid, TypePath};
 use bevy_utils::{Hashed, PreHashMap};
 use std::{
     any::{Any, TypeId},
@@ -33,7 +33,7 @@ impl<T: Animatable> ClipCurve for CurveWrapper<T> {
 }
 
 /// An immutable container of curves.
-#[derive(TypeUuid)]
+#[derive(bevy_asset::Asset, TypePath, TypeUuid)]
 #[uuid = "28258d17-82c2-4a6f-8930-322baa150396"]
 pub struct AnimationClip {
     // TODO: See if we can remove this extra layer of indirection

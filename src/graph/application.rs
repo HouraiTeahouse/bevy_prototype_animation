@@ -20,9 +20,8 @@ pub(crate) struct BoneBinding {
 pub(crate) fn animate_entities_system(
     world: &World,
     entities: Query<(Entity, &BoneBinding)>,
-    graphs: Query<(&AnimationGraph, ChangeTrackers<AnimationGraph>)>,
-    type_registry: Res<TypeRegistryArc>,
-    task_pool: Res<ComputeTaskPool>,
+    graphs: Query<Ref<AnimationGraph>>,
+    type_registry: Res<AppTypeRegistry>,
     dead: Local<DashSet<Entity>>,
     mut commands: Commands,
 ) {
@@ -36,7 +35,7 @@ pub(crate) fn animate_entities_system(
     }
 
     let type_registry = type_registry.read();
-    entities.par_for_each(&*task_pool, BINDING_BATCCH_SIZE, |(entity, binding)| {
+    entities.par_iter().for_each(|(entity, binding)| {
         if animate_entity(entity, binding, &graphs, &type_registry, world).is_ok() {
             dead.insert(entity);
         }
@@ -65,11 +64,11 @@ enum AnimatePropertyError {
 fn animate_entity(
     entity: Entity,
     binding: &BoneBinding,
-    graphs: &Query<(&AnimationGraph, ChangeTrackers<AnimationGraph>)>,
+    graphs: &Query<Ref<AnimationGraph>>,
     type_registry: &TypeRegistry,
     world: &World,
 ) -> Result<(), AnimatePropertyError> {
-    let (graph, tracker) = graphs
+    let graph = graphs
         .get(binding.graph)
         .map_err(|_| AnimatePropertyError::InvalidAnimationGraph)?;
     let bone = graph
@@ -77,12 +76,15 @@ fn animate_entity(
         .ok_or(AnimatePropertyError::InvalidBoundBone)?;
     if bone.entity() != Some(entity) {
         return Err(AnimatePropertyError::BoneNoLongerBound);
-    } else if !tracker.is_changed() {
+    } else if !graph.is_changed() {
         // No need to update the components if the upstream graph hasn't changed.
         return Ok(());
     }
+    // TODO: Can we pass in EntityMut instead of Entity?
+    let mut entitymut = world.entity_mut(entity);
 
     let mut success = false;
+    // TODO: Is there a way to make this more efficient? see https://github.com/bevyengine/bevy/issues/4985
     for track in bone.tracks() {
         let property = track.property;
         let component = type_registry
@@ -95,10 +97,12 @@ fn animate_entity(
             // The blend_via_reflect call below will cause simultaneous read-only
             // access of Resources in a read-only fashion. There are no aliasing
             // issues as this mutation only affects components.
-            .and_then(|reflect| unsafe { reflect.reflect_component_unchecked_mut(world, entity) });
+            .and_then(|reflect| unsafe { 
+                reflect.reflect_mut(&mut entitymut)
+             });
 
         if let Some(mut comp) = component {
-            if let Ok(field) = property.field_path().field_mut(comp.as_mut()) {
+            if let Ok(field) = property.field_path().field_mut(comp.as_reflect_mut()) {
                 // SAFE: This access is read-only and is required to only access
                 // resources. This cannot cause race conditions as only non-Resource
                 // components are mutated.

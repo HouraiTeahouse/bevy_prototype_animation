@@ -2,9 +2,9 @@ use crate::{
     curve::{Curve, CurveFixed, KeyframeIndex},
     Animatable,
 };
-use bevy_core::FloatOrd;
 use bevy_math::*;
 use bevy_transform::prelude::Transform;
+use bevy_utils::FloatOrd;
 
 enum CompressedFloat32Storage {
     Static {

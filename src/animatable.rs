@@ -1,10 +1,10 @@
 use crate::util;
-use bevy_asset::{Asset, Assets, Handle, HandleId};
-use bevy_core::FloatOrd;
+use bevy_asset::{Asset, Assets, Handle};
 use bevy_ecs::world::World;
 use bevy_math::*;
 use bevy_reflect::Reflect;
 use bevy_transform::prelude::Transform;
+use bevy_utils::FloatOrd;
 
 pub struct BlendInput<T> {
     pub weight: f32,
@@ -122,20 +122,21 @@ impl Animatable for bool {
     }
 }
 
-impl Animatable for HandleId {
-    #[inline]
-    fn interpolate(a: &Self, b: &Self, t: f32) -> Self {
-        util::step_unclamped(*a, *b, t)
-    }
+// TODO: Should this be implemented for AssetId?
+// impl Animatable for HandleId {
+//     #[inline]
+//     fn interpolate(a: &Self, b: &Self, t: f32) -> Self {
+//         util::step_unclamped(*a, *b, t)
+//     }
 
-    #[inline]
-    fn blend(inputs: impl Iterator<Item = BlendInput<Self>>) -> Self {
-        inputs
-            .max_by(|a, b| FloatOrd(a.weight).cmp(&FloatOrd(b.weight)))
-            .map(|input| input.value)
-            .expect("Attempted to blend HandleId with zero inputs.")
-    }
-}
+//     #[inline]
+//     fn blend(inputs: impl Iterator<Item = BlendInput<Self>>) -> Self {
+//         inputs
+//             .max_by(|a, b| FloatOrd(a.weight).cmp(&FloatOrd(b.weight)))
+//             .map(|input| input.value)
+//             .expect("Attempted to blend HandleId with zero inputs.")
+//     }
+// }
 
 impl<T: Asset> Animatable for Handle<T> {
     #[inline]
@@ -157,13 +158,17 @@ impl<T: Asset> Animatable for Handle<T> {
         // Upgrade weak handles into strong ones.
         if self.is_strong() {
             return;
+        } else {
+            // TODO: As of assets v2 Handles are now considered to be strong in general, and weak handles might be removed.
+            // I'm not sure if it's possible to upgrade a weak handle to a strong one anymore.
+            todo!("Figure out how to upgrade weak handles to strong ones if they don't get removed upstream.");
         }
-        *self = world
-            .get_resource::<Assets<T>>()
-            .expect(
-                "Attempted to animate a Handle<T> without the corresponding Assets<T> resource.",
-            )
-            .get_handle(self.id);
+        // *self = world
+        //     .get_resource::<Assets<T>>()
+        //     .expect(
+        //         "Attempted to animate a Handle<T> without the corresponding Assets<T> resource.",
+        //     )
+        //     .get(self.id()).unwrap();
     }
 }
 

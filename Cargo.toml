@@ -14,8 +14,9 @@ bevy_reflect = { git = "https://github.com/bevyengine/bevy.git", features = ["gl
 bevy_transform = { git = "https://github.com/bevyengine/bevy.git" }
 bevy_tasks = { git = "https://github.com/bevyengine/bevy.git" }
 bevy_utils = { git = "https://github.com/bevyengine/bevy.git" }
+bevy_hierarchy = { git = "https://github.com/bevyengine/bevy.git" }
 serde = "1.0"
-parallel_vec = "0.2"
+parallel_vec = "0.2.4"
 thiserror = "1.0"
 dashmap = "5.0"
 
