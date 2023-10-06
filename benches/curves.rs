@@ -1,5 +1,6 @@
-use bevy::math::Vec4;
-use bevy_prototype_animation::curves::{Curve, CurveVariable, KeyframeIndex};
+use bevy_math::Vec4;
+use bevy_prototype_animation::{curve::KeyframeIndex, prelude::Curve};
+// use bevy_prototype_animation::curves::{Curve, CurveVariable, KeyframeIndex};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use rand::prelude::*;
 
