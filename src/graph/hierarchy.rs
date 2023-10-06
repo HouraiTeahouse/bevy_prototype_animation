@@ -4,45 +4,7 @@ use crate::{
 };
 use bevy_core::Name;
 use bevy_ecs::prelude::*;
-use bevy_transform::prelude::{Children, Parent, PreviousParent};
-use bevy_utils::HashSet;
-
-// This system bubbles up changes in transform hierarchies, dirtying all
-// affected animation graphs. This does `O(d)` parent lookupps, where `d`
-// is the depth of the changed
-pub(crate) fn dirty_hierarchy_system(
-    mut graphs: Query<&mut AnimationGraph>,
-    changed: Query<(Entity, Option<&PreviousParent>), Or<(Changed<Parent>, Changed<Name>)>>,
-    //     removed: Query<&PreviousParent, Without<Parent>>,
-    parents: Query<&Parent, With<Name>>,
-    mut open_set: Local<Vec<Entity>>,
-    mut visited: Local<HashSet<Entity>>,
-) {
-    // Check both the current entity's hierarchy and its previous one
-    // as it may have moved into or out of a animator hierarchy.
-    //     open_set.extend(removed.iter().map(|pp| pp.0));
-    for (entity, previous) in changed.iter() {
-        open_set.push(entity);
-        if let Some(prev) = previous {
-            //     open_set.push(prev.0);
-        }
-    }
-    // Bubble up change and mark all graphs in the ancestor path as dirty
-    while let Some(current) = open_set.pop() {
-        // Reduce the traversal by avoiding paths already traversed.
-        if visited.contains(&current) {
-            continue;
-        }
-        visited.insert(current);
-        if let Ok(mut graph) = graphs.get_mut(current) {
-            graph.clips.set_dirty(true);
-        }
-        if let Ok(parent) = parents.get(current) {
-            open_set.push(parent.0);
-        }
-    }
-    visited.clear();
-}
+use bevy_hierarchy::Children;
 
 // This runs a `O(n*b*d)` operation for every animation graph in the World.
 // Here, n is the number of bones the graph has, b is the upper bound branching

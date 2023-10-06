@@ -1,5 +1,6 @@
-use bevy::math::Vec4;
-use bevy_prototype_animation::curves::{Curve, CurveVariable, KeyframeIndex};
+use bevy_math::Vec4;
+use bevy_prototype_animation::{curve::KeyframeIndex, prelude::Curve};
+// use bevy_prototype_animation::curves::{Curve, CurveVariable, KeyframeIndex};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use rand::prelude::*;
 
@@ -8,7 +9,7 @@ criterion_main!(benches);
 
 const SAMPLES_COUNT: usize = 100;
 
-fn curve_sampling<T>(samples: &[f32], curve: &impl Curve<Output = T>) {
+fn curve_sampling<T>(samples: &[f32], curve: &impl Curve<T>) {
     let mut c: KeyframeIndex = 0;
     for t in samples {
         let (nc, v) = curve.sample_with_cursor(c, *t);

@@ -140,14 +140,14 @@ impl GraphClips {
 
     pub(super) fn find_bone(&self, path: &EntityPath) -> Option<&Bone> {
         self.bones
-            .get(&path)
+            .get(path)
             .copied()
             .map(|bone_id| &self.tracks[bone_id.0])
     }
 
     pub(super) fn find_bone_mut(&mut self, path: &EntityPath) -> Option<&mut Bone> {
         self.bones
-            .get(&path)
+            .get(path)
             .copied()
             .map(|bone_id| &mut self.tracks[bone_id.0])
     }
@@ -253,7 +253,7 @@ impl<T: Animatable> Track for CurveTrack<T> {
         output: &mut dyn Reflect,
         world: &World,
     ) -> Result<(), TrackError> {
-        if output.any().type_id() == TypeId::of::<T>() {
+        if output.as_any().type_id() == TypeId::of::<T>() {
             let mut value = self.sample_and_blend(state);
             if !matches!(value.reflect_partial_eq(output), Some(true)) {
                 // SAFE: Only read-only access to the World's resources is

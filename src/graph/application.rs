@@ -1,5 +1,5 @@
 use crate::graph::{track::BoneId, AnimationGraph};
-use bevy_ecs::prelude::*;
+use bevy_ecs::{prelude::*, system::SystemState, world::unsafe_world_cell::UnsafeWorldCell};
 use bevy_log::warn;
 use bevy_reflect::{TypeRegistry, TypeRegistryArc};
 use bevy_tasks::ComputeTaskPool;
@@ -18,14 +18,25 @@ pub(crate) struct BoneBinding {
 // The immutable reference to the a World is used mutably in an unsafe
 // manner if simultaneous World access is allowed.
 pub(crate) fn animate_entities_system(
-    world: &World,
-    entities: Query<(Entity, &BoneBinding)>,
-    graphs: Query<(&AnimationGraph, ChangeTrackers<AnimationGraph>)>,
-    type_registry: Res<TypeRegistryArc>,
-    task_pool: Res<ComputeTaskPool>,
+    world: &mut World,
+    state: &mut SystemState<(
+        Query<(Entity, &BoneBinding)>,
+        Query<Ref<AnimationGraph>>,
+        Res<AppTypeRegistry>,
+        Commands,
+    )>,
+    // entities: Query<(Entity, &BoneBinding)>,
+    // graphs: Query<Ref<AnimationGraph>>,
+    // type_registry: Res<AppTypeRegistry>,
+    // TODO: I'm not sure if this even works.
     dead: Local<DashSet<Entity>>,
-    mut commands: Commands,
+    // mut commands: Commands,
 ) {
+    let worldcell = world.as_unsafe_world_cell();
+
+    // TODO: Should this be cached for perf reasons?
+    let (entities, graphs, type_registry, mut commands) =
+        unsafe { state.get_unchecked_manual(worldcell) };
     debug_assert!(dead.is_empty());
 
     if graphs.is_empty() {
@@ -36,8 +47,8 @@ pub(crate) fn animate_entities_system(
     }
 
     let type_registry = type_registry.read();
-    entities.par_for_each(&*task_pool, BINDING_BATCCH_SIZE, |(entity, binding)| {
-        if animate_entity(entity, binding, &graphs, &type_registry, world).is_ok() {
+    entities.par_iter().for_each(|(entity, binding)| {
+        if animate_entity(entity, binding, &graphs, &type_registry, &worldcell).is_ok() {
             dead.insert(entity);
         }
     });
@@ -65,11 +76,11 @@ enum AnimatePropertyError {
 fn animate_entity(
     entity: Entity,
     binding: &BoneBinding,
-    graphs: &Query<(&AnimationGraph, ChangeTrackers<AnimationGraph>)>,
+    graphs: &Query<Ref<AnimationGraph>>,
     type_registry: &TypeRegistry,
-    world: &World,
+    world: &UnsafeWorldCell,
 ) -> Result<(), AnimatePropertyError> {
-    let (graph, tracker) = graphs
+    let graph = graphs
         .get(binding.graph)
         .map_err(|_| AnimatePropertyError::InvalidAnimationGraph)?;
     let bone = graph
@@ -77,12 +88,15 @@ fn animate_entity(
         .ok_or(AnimatePropertyError::InvalidBoundBone)?;
     if bone.entity() != Some(entity) {
         return Err(AnimatePropertyError::BoneNoLongerBound);
-    } else if !tracker.is_changed() {
+    } else if !graph.is_changed() {
         // No need to update the components if the upstream graph hasn't changed.
         return Ok(());
     }
+    // TODO: Can we pass in EntityWorldMut or an UnsafeEntityCell instead of Entity?
+    let entitymut = world.get_entity(entity).unwrap();
 
     let mut success = false;
+    // TODO: Is there a way to make this more efficient? see https://github.com/bevyengine/bevy/issues/4985
     for track in bone.tracks() {
         let property = track.property;
         let component = type_registry
@@ -95,17 +109,17 @@ fn animate_entity(
             // The blend_via_reflect call below will cause simultaneous read-only
             // access of Resources in a read-only fashion. There are no aliasing
             // issues as this mutation only affects components.
-            .and_then(|reflect| unsafe { reflect.reflect_component_unchecked_mut(world, entity) });
+            .and_then(|reflect| unsafe { reflect.reflect_unchecked_mut(entitymut) });
 
         if let Some(mut comp) = component {
-            if let Ok(field) = property.field_path().field_mut(comp.as_mut()) {
+            if let Ok(field) = property.field_path().field_mut(comp.as_reflect_mut()) {
                 // SAFE: This access is read-only and is required to only access
                 // resources. This cannot cause race conditions as only non-Resource
                 // components are mutated.
                 success |= unsafe {
                     track
                         .track
-                        .blend_via_reflect(&graph.state, field, world)
+                        .blend_via_reflect(&graph.state, field, world.world())
                         .is_ok()
                 };
             }
