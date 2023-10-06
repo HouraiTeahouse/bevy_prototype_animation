@@ -9,7 +9,7 @@ criterion_main!(benches);
 
 const SAMPLES_COUNT: usize = 100;
 
-fn curve_sampling<T>(samples: &[f32], curve: &impl Curve<Output = T>) {
+fn curve_sampling<T>(samples: &[f32], curve: &impl Curve<T>) {
     let mut c: KeyframeIndex = 0;
     for t in samples {
         let (nc, v) = curve.sample_with_cursor(c, *t);
